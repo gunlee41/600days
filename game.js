@@ -473,7 +473,7 @@ function updateStreet(dt) {
       sfx('bark');
       G.lock = 7.0;
       G.cine = { type: 'dog', t: 0 };
-      sayQ(['병원에 데려가라, 인간.', '으으응? 알았어.', '내 이름은 多多다.'], 2.1);
+      sayQ(['병원에 데려가라, 인간.', '으으응? 알았어.', '내 이름은 다다다.'], 2.1);
     }
   }
   if (G.cine && G.cine.type === 'dog') {
@@ -798,6 +798,27 @@ function drawLab() {
     px(dx + 18, GY - 29, 18, 1, '#5fd0e8');
     px(dx + 18, GY - 26, 8, 1, '#3d7f92');
   }
+
+  labDoor(1215, '연구소', 'in');
+  labDoor(1590, '출구', 'out');
+}
+
+function labDoor(wx, label, kind) {
+  var x = wx - G.cam;
+  if (x < -40 || x > W + 20) return;
+  var y = GY - 58;
+  px(x - 3, y - 3, 36, 61, '#3b3850');
+  px(x, y, 30, 58, '#14121e');
+  px(x + 2, y + 2, 26, 54, kind === 'out' ? '#22303f' : '#232233');
+  px(x + 5, y + 6, 20, 14, kind === 'out' ? '#3d6070' : '#1b1a2a');
+  px(x + 6, y + 7, 18, 12, kind === 'out' ? '#7ea6b5' : '#2d3450');
+  px(x + 22, y + 30, 4, 3, '#c9b98d');
+  px(x - 5, y - 12, 40, 10, '#2b2940');
+  ctx.font = '9px Galmuri11, monospace';
+  ctx.fillStyle = kind === 'out' ? '#9fe3c0' : '#9fe3ff';
+  ctx.textAlign = 'center';
+  ctx.fillText(label, x + 15, y - 4);
+  ctx.textAlign = 'left';
 }
 
 function drawBusan() {
@@ -936,9 +957,9 @@ function wrapText(text, maxW, font) {
 
 function drawToast() {
   if (G.toast.t <= 0) return;
-  var font = '10px Galmuri11, monospace';
-  var lines = wrapText(G.toast.text, 268, font);
-  var h = lines.length * 13 + 9;
+  var font = '11px Galmuri11, monospace';
+  var lines = wrapText(G.toast.text, 266, font);
+  var h = lines.length * 14 + 10;
   var y = 8;
   ctx.globalAlpha = Math.min(1, G.toast.t * 3) * Math.min(1, (3.6 - G.toast.t) * 6 + 0.2);
   rrect(14, y, W - 28, h, 3, 'rgba(12,10,22,.94)', 'rgba(255,214,170,.55)');
@@ -946,7 +967,7 @@ function drawToast() {
   ctx.font = font;
   ctx.fillStyle = '#ffe9cf';
   ctx.textAlign = 'center';
-  for (var i = 0; i < lines.length; i++) ctx.fillText(lines[i], W / 2, y + 16 + i * 13);
+  for (var i = 0; i < lines.length; i++) ctx.fillText(lines[i], W / 2, y + 17 + i * 14);
   ctx.textAlign = 'left';
   ctx.globalAlpha = 1;
 }
@@ -997,7 +1018,7 @@ function drawStreetWorld() {
     ctx.globalAlpha = 1;
     drawCat(380 - c, cb, 1);
     if (G.player.x > 260 && G.player.x < 380) {
-      ctx.font = '8px Galmuri11, monospace';
+      ctx.font = '9px Galmuri11, monospace';
       ctx.fillStyle = 'rgba(255,255,255,.85)';
       ctx.textAlign = 'center';
       ctx.fillText('↑ 점프!', 385 - c, cb - 8);
@@ -1021,7 +1042,7 @@ function drawStreetWorld() {
     px(dz, GY - 58, 42, 58, '#12111c');
     px(dz + 18, GY - 30, 6, 30, '#3a3752');
     px(dz - 4, GY - 70, 50, 8, '#3c3850');
-    ctx.font = '8px Galmuri11, monospace';
+    ctx.font = '9px Galmuri11, monospace';
     ctx.fillStyle = '#9fe3ff';
     ctx.textAlign = 'center';
     ctx.fillText('연구소', dz + 21, GY - 63);
@@ -1044,7 +1065,7 @@ function drawStreetWorld() {
     }
   }
 
-  if (!G.flags.dog) {
+  if (!G.flags.dog && G.player.x > 1640) {
     ctx.globalAlpha = 0.9;
     drawDog(1750 - c, GY - 8, -1);
     ctx.globalAlpha = 1;
@@ -1062,6 +1083,7 @@ function drawStreetWorld() {
 
   drawTrailPets();
   drawBoy(G.player.x - c, G.player.y, G.player.ph, G.player.face);
+  if (G.lock > 0 && !G.card && !G.scene) drawAlert(G.player.x - c + 6, G.player.y);
 
   if (G.player.x > 2240) {
     var ax = 2400 - c;
@@ -1070,7 +1092,7 @@ function drawStreetWorld() {
     px(ax + 32, GY - 36, 12, 36, '#ffd98a');
     px(ax + 36, GY - 36, 4, 36, '#ffe9b8');
     px(ax - 4, GY - 70, 82, 6, '#4b4568');
-    ctx.font = '8px Galmuri11, monospace';
+    ctx.font = '9px Galmuri11, monospace';
     ctx.fillStyle = '#ffe9b8';
     ctx.textAlign = 'center';
     ctx.fillText('대전역', ax + 37, GY - 74);
@@ -1084,6 +1106,7 @@ function drawBusanWorld() {
   drawTrailPets();
   drawWoman(wm.x - G.cam, GY - 24, wm.face, 0);
   drawBoy(G.player.x - G.cam, G.player.y, G.player.ph, G.player.face);
+  if (G.lock > 0) drawAlert(G.player.x - G.cam + 6, G.player.y);
 
   if (!G.flags.meeting && G.player.x < wm.x - 90) {
     ctx.font = '10px Galmuri11, monospace';
@@ -1106,6 +1129,10 @@ function drawEnding() {
 
   px(0, GY, W, H - GY, '#161226');
   px(0, GY, W, 1, '#2b2340');
+  if (G.endingT > 2.4) {
+    px(0, 149, W, 31, 'rgba(10,8,20,.62)');
+    px(0, 149, W, 1, 'rgba(255,214,170,.18)');
+  }
 
   drawParts();
 
@@ -1137,11 +1164,12 @@ function drawEnding() {
 
   if (G.endingT > 2.4) {
     ctx.textAlign = 'center';
+    ctx.font = '10px Galmuri11, monospace';
+    ctx.fillStyle = 'rgba(255,240,214,' + (0.85 + 0.15 * Math.sin(G.t * 2.5)) + ')';
+    ctx.fillText('앙꼬 · 다다와 함께, 앞으로도 잘 부탁해', W / 2, 161);
     ctx.font = '9px Galmuri11, monospace';
-    ctx.fillStyle = 'rgba(240,232,255,' + (0.7 + 0.3 * Math.sin(G.t * 2.5)) + ')';
-    ctx.fillText('앙꼬 · 多多와 함께, 앞으로도 잘 부탁해', W / 2, 160);
-    ctx.fillStyle = 'rgba(220,210,240,.7)';
-    ctx.fillText('tap to restart', W / 2, 173);
+    ctx.fillStyle = 'rgba(200,190,225,' + (0.55 + 0.35 * Math.sin(G.t * 3)) + ')';
+    ctx.fillText('tap to restart', W / 2, 174);
     ctx.textAlign = 'left';
   }
 }
@@ -1170,7 +1198,7 @@ function drawTitle() {
   ctx.fillText('600일', W / 2, 61);
   ctx.font = '9px Galmuri11, monospace';
   ctx.fillStyle = '#ffd0dd';
-  ctx.fillText('앙꼬, 多多, 그리고 우다영', W / 2, 74);
+  ctx.fillText('앙꼬, 다다, 그리고 우다영', W / 2, 74);
   ctx.fillStyle = 'rgba(255,255,255,' + (0.45 + 0.45 * Math.sin(G.t * 3)) + ')';
   ctx.fillText('TAP / SPACE', W / 2, 112);
   ctx.textAlign = 'left';
@@ -1224,7 +1252,7 @@ function drawScene() {
   ctx.font = '11px Galmuri11, monospace';
   ctx.fillStyle = '#3b4a5c';
   ctx.fillText('다다가 무사히 나았다.', W / 2, 120);
-  ctx.font = '8px Galmuri11, monospace';
+  ctx.font = '9px Galmuri11, monospace';
   ctx.fillStyle = '#8b9aab';
   ctx.fillText('동물병원', W / 2, 156);
   ctx.textAlign = 'left';
@@ -1275,6 +1303,17 @@ function drawBoySit(x, y) {
   px(3, -20, 2, 2, '#2a2333'); px(9, -20, 2, 2, '#2a2333');
   px(6, -17, 2, 1, '#dfa87e');
   px(2, -22, 1, 7, hair); px(12, -22, 1, 5, hair);
+  ctx.restore();
+}
+
+function drawAlert(x, y) {
+  var b = Math.sin(G.t * 7) * 1;
+  ctx.save();
+  ctx.translate(x | 0, (y + b) | 0);
+  px(-1, -8, 3, 1, '#fff8e8'); px(0, -7, 1, 2, '#fff8e8');
+  rrect(-6, -21, 12, 14, 3, '#fff8e8', '#2a2333');
+  px(-1, -19, 3, 6, '#2a2333');
+  px(-1, -11, 3, 3, '#2a2333');
   ctx.restore();
 }
 

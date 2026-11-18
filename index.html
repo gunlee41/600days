@@ -51,6 +51,20 @@ canvas{width:100%;height:100%;display:block;image-rendering:pixelated}
   <button class="btn" id="mute" aria-label="mute">♪</button>
   <div id="hint">← → 이동 · Space/↑ 점프 · M 음소거</div>
 </div></div>
+<script>
+(function () {
+  var st = document.getElementById('stage');
+  function fit() {
+    var s = Math.max(1, Math.floor(Math.min(innerWidth / 320, innerHeight / 180)));
+    if (matchMedia('(pointer:coarse)').matches) s = Math.min(innerWidth / 320, (innerHeight - 130) / 180);
+    st.style.width = (320 * s) + 'px';
+    st.style.height = (180 * s) + 'px';
+  }
+  addEventListener('resize', fit);
+  addEventListener('orientationchange', function () { setTimeout(fit, 80); });
+  fit();
+})();
+</script>
 <script src="logic.js"></script>
 <script src="game.js"></script>
 </body>
