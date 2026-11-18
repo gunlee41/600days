@@ -235,13 +235,18 @@ var G = {
   chap: { text: '', t: 0 },
   dist: 0,
   bumpCd: 0,
-  hits: 0
+  hits: 0,
+  ach: { puddle: 0, cone: 0, bird: 0 },
+  achDone: {},
+  achMsg: { text: '', t: 0 }
 };
+
+var ACH_NAME = { puddle: '[레인슈즈 매니아]', cone: '[소림축구! 강철 정강이!]', bird: '[진짜 버드 스트라이크...]' };
 
 var OBST = {
   street: [
     { x: 560, type: 'puddle' }, { x: 760, type: 'bird' }, { x: 1000, type: 'cone' },
-    { x: 1280, type: 'bird' }, { x: 1700, type: 'puddle' }, { x: 2200, type: 'cone' },
+    { x: 1150, type: 'bird' }, { x: 1700, type: 'puddle' }, { x: 2200, type: 'cone' },
     { x: 2300, type: 'puddle' }, { x: 2380, type: 'bird' }
   ],
   busan: [ { x: 420, type: 'puddle' }, { x: 560, type: 'bird' }, { x: 700, type: 'cone' } ],
@@ -321,6 +326,9 @@ function startGame() {
   G.dist = 0;
   G.bumpCd = 0;
   G.hits = 0;
+  G.ach = { puddle: 0, cone: 0, bird: 0 };
+  G.achDone = {};
+  G.achMsg = { text: '', t: 0 };
   G.flags = { cat: false, woman: false, womanGone: false, letter: false, dirDown: false, dog: false, dogOut: false, ticket: false, meeting: false };
   G.woman = { x: 900, face: -1, run: false };
   music('street');
@@ -373,6 +381,7 @@ function update(dt) {
   if (G.flash > 0) G.flash = Math.max(0, G.flash - dt * 3.2);
   if (G.chap.t > 0) G.chap.t -= dt;
   if (G.bumpCd > 0) G.bumpCd -= dt;
+  if (G.achMsg.t > 0) G.achMsg.t -= dt;
 
   if (G.card) {
     G.card.t += dt;
@@ -471,6 +480,12 @@ function updateObstacles(dt) {
       p.vy = bird ? -40 : -170;
       p.ground = false;
       sfx('bump');
+      G.ach[o.type] = (G.ach[o.type] || 0) + 1;
+      if (G.ach[o.type] >= 3 && !G.achDone[o.type]) {
+        G.achDone[o.type] = true;
+        G.achMsg = { text: ACH_NAME[o.type], t: 3.6 };
+        sfx('get');
+      }
       for (var k = 0; k < 6; k++) {
         G.parts.push({
           x: box.x + Math.random() * box.w, y: bird ? box.y + 3 : GY - 2,
@@ -596,20 +611,24 @@ function updateStreet(dt) {
 
   /* 4. director */
   if (G.zone === 'lab' && G.flags.letter && !G.flags.dirDown && !G.cine && p.x > 1390) {
-    G.cine = { type: 'throw', t: 0 };
-    G.lock = 5.2;
-    sfx('paper');
-    say('날 막지마!!!', 2.0, 'other');
+    G.cine = { type: 'throw', phase: 'talk', t: 0 };
+    G.lock = 60;
+    sfx('tick');
+    sayQ([{ t: '자네는!', w: 'other' }, { t: '절대로!', w: 'other' }, { t: '계속!', w: 'other' }, { t: '내 노예야!!!', w: 'other' }], 1.0);
   }
   if (G.cine && G.cine.type === 'throw') {
     G.cine.t += dt;
-    if (G.cine.t > 0.42 && !G.cine.hit) {
+    if (G.cine.phase === 'talk') {
+      if (dialogDone()) { G.cine.phase = 'aim'; G.cine.t = 0; }
+    } else if (G.cine.phase === 'aim') {
+      if (G.cine.t > 0.25 && (keys.jump || jumpEdge)) { jumpEdge = false; G.cine.phase = 'fly'; G.cine.t = 0; sfx('paper'); }
+    } else if (G.cine.t > 0.42 && !G.cine.hit) {
       G.cine.hit = true;
       G.flags.dirDown = true;
       sfx('boom');
+      say('아무도 날 막지 못하셈~', 2.2, 'other');
     }
-    if (G.cine.t > 1.6 && !G.cine.said) { G.cine.said = true; say('아무도 날 막지 못하셈~', 2.0, 'other'); }
-    if (G.cine.t > 4.6 && !G.cine.out) {
+    if (G.cine.hit && G.cine.t > 2.6 && !G.cine.out) {
       G.cine.out = true;
       startTransition(function () {
         G.cine = null; G.lock = 1.4; G.sky = 'dusk';
@@ -711,6 +730,18 @@ function updateBusan(dt) {
 
 function updateEnding(dt) {
   G.endingT += dt;
+  if (G.endingT > 1.4) {
+    G.heartT = (G.heartT || 0) - dt;
+    if (G.heartT <= 0) {
+      G.heartT = 0.34;
+      G.parts.push({
+        x: 143 + Math.random() * 12, y: 132 + Math.random() * 4,
+        vx: (Math.random() - 0.5) * 10, vy: -16 - Math.random() * 10,
+        life: 2.6, max: 2.6, heart: true, big: true,
+        col: Math.random() < 0.5 ? '#ff8fb0' : '#ffd0dd'
+      });
+    }
+  }
   if (G.endingT < 0.9) return;
   G.fwTimer -= dt;
   if (G.fwTimer > 0) return;
@@ -741,7 +772,7 @@ function updateParts(dt) {
   for (var i = G.parts.length - 1; i >= 0; i--) {
     var q = G.parts[i];
     q.x += q.vx * dt; q.y += q.vy * dt;
-    q.vy += 46 * dt;
+    if (!q.heart) q.vy += 46 * dt;
     q.vx *= 0.975;
     q.life -= dt;
     if (q.life <= 0) G.parts.splice(i, 1);
@@ -1175,7 +1206,14 @@ function drawParts() {
       px(q.x - q.vx * 0.025, q.y - q.vy * 0.025, q.size || 1, q.size || 1, q.col);
     }
     ctx.globalAlpha = a;
-    if (q.heart) {
+    if (q.big) {
+      var hx = q.x | 0, hy = q.y | 0;
+      px(hx - 2, hy, 2, 2, q.col); px(hx + 1, hy, 2, 2, q.col);
+      px(hx - 3, hy + 1, 7, 2, q.col);
+      px(hx - 2, hy + 3, 5, 1, q.col);
+      px(hx - 1, hy + 4, 3, 1, q.col);
+      px(hx, hy + 5, 1, 1, q.col);
+    } else if (q.heart) {
       px(q.x - 1, q.y, 3, 2, q.col);
       px(q.x, q.y - 1, 1, 1, q.col);
       px(q.x + 1, q.y + 2, 1, 1, q.col);
@@ -1249,7 +1287,8 @@ function drawStreetWorld() {
 
   if (G.zone === 'lab') {
     drawDirector(1470 - c, GY - 24, G.flags.dirDown);
-    if (G.cine && G.cine.type === 'throw' && G.cine.t < 0.72) {
+    if (G.cine && G.cine.type === 'throw' && G.cine.phase === 'talk') drawAlert(1470 - c + 6, GY - 28);
+    if (G.cine && G.cine.type === 'throw' && G.cine.phase !== 'aim' && G.cine.phase !== 'talk') {
       var pr = clamp(G.cine.t / 0.42, 0, 1);
       var lx3 = G.player.x + (1470 - G.player.x) * pr;
       var ly3 = G.player.y + 2 + (GY - 26 - G.player.y - 2) * pr - Math.sin(pr * Math.PI) * 24;
@@ -1518,6 +1557,25 @@ function drawBoySit(x, y) {
   ctx.restore();
 }
 
+function drawAch() {
+  if (G.achMsg.t <= 0) return;
+  var a = Math.min(1, G.achMsg.t * 1.6, (3.6 - G.achMsg.t) * 5 + 0.15);
+  var w = 200, x = (W - w) / 2 | 0, y = 46 - (1 - Math.min(1, (3.6 - G.achMsg.t) * 8)) * 12;
+  ctx.globalAlpha = a;
+  rrect(x, y, w, 28, 3, 'rgba(14,12,24,.95)', 'rgba(255,214,120,.75)');
+  px(x + 8, y + 13, 3, 3, '#ffd97a');
+  px(x + w - 11, y + 13, 3, 3, '#ffd97a');
+  ctx.textAlign = 'center';
+  ctx.font = '8px Galmuri11, monospace';
+  ctx.fillStyle = '#ffd97a';
+  ctx.fillText('업적 달성', W / 2, y + 11);
+  ctx.font = '9px Galmuri11, monospace';
+  ctx.fillStyle = '#fff3d6';
+  ctx.fillText(G.achMsg.text, W / 2, y + 22);
+  ctx.textAlign = 'left';
+  ctx.globalAlpha = 1;
+}
+
 function drawAlert(x, y) {
   var b = Math.sin(G.t * 7) * 1;
   ctx.save();
@@ -1542,6 +1600,16 @@ function render() {
     drawParts();
     drawHUD();
     drawToast();
+    drawAch();
+    if (G.cine && G.cine.type === 'throw' && G.cine.phase === 'aim') {
+      var hw = 178, hx = (W - hw) / 2 | 0, hy = 44;
+      rrect(hx, hy, hw, 18, 3, 'rgba(12,10,22,.92)', 'rgba(255,214,120,.7)');
+      ctx.textAlign = 'center';
+      ctx.font = '9px Galmuri11, monospace';
+      ctx.fillStyle = 'rgba(255,233,207,' + (0.7 + 0.3 * Math.sin(G.t * 6)) + ')';
+      ctx.fillText('점프키를 눌러 사직서를 던지세요.', W / 2, hy + 12);
+      ctx.textAlign = 'left';
+    }
     if (G.scene) drawScene();
     if (G.blink > 0) {
       var bh = (H / 2) * G.blink;
