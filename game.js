@@ -4,7 +4,7 @@
 
 /* ---------- constants ---------- */
 var W = 320, H = 180, GY = 146;
-var STREET_LEN = 2100, BUSAN_LEN = 1250;
+var STREET_LEN = 2620, BUSAN_LEN = 1250;
 
 /* ---------- canvas ---------- */
 var canvas = document.getElementById('c');
@@ -92,6 +92,13 @@ function sfx(name) {
     case 'boom': tone(150, 0.28, { type: 'sawtooth', vol: 0.07, slide: 0.35 }); break;
     case 'heart': tone(880, 0.1, { type: 'triangle', vol: 0.05 }); tone(1320, 0.18, { type: 'triangle', vol: 0.05, when: 0.09 }); break;
     case 'blink': tone(500, 0.5, { type: 'sine', vol: 0.06, slide: 0.4 }); break;
+    case 'whistle':
+      tone(392, 0.5, { type: 'sawtooth', vol: 0.05, slide: 1.03 });
+      tone(523, 0.5, { type: 'sawtooth', vol: 0.04, slide: 1.03, when: 0.02 });
+      tone(659, 0.45, { type: 'sawtooth', vol: 0.035, slide: 1.6, when: 0.5 });
+      break;
+    case 'paper': tone(1400, 0.05, { type: 'triangle', vol: 0.03 }); tone(900, 0.07, { type: 'triangle', vol: 0.025, when: 0.05 }); break;
+    case 'whoosh': tone(300, 0.22, { type: 'sawtooth', vol: 0.03, slide: 2.2 }); break;
   }
 }
 
@@ -133,6 +140,10 @@ function setKey(k, v) {
 
 window.addEventListener('keydown', function (e) {
   if (e.repeat) return;
+  if (G.mode === 'title' || G.mode === 'end') {
+    if (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'w') { e.preventDefault(); startGame(); }
+    return;
+  }
   if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') setKey('left', true);
   else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') setKey('right', true);
   else if (e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') { setKey('jump', true); e.preventDefault(); }
@@ -212,12 +223,25 @@ var G = {
   blinkPhase: 0,
   endingT: 0,
   fwTimer: 0,
-  worldX: 0
+  worldX: 0,
+  sky: 'night',
+  zone: 'city',
+  dlgQ: null,
+  dlgDur: 2.2,
+  card: null,
+  scene: null,
+  flash: 0
 };
 
 function say(text, dur) {
   G.toast = { text: text, t: dur || 2.6 };
   sfx('text');
+}
+
+function sayQ(lines, dur) {
+  G.dlgDur = dur || 2.2;
+  G.dlgQ = lines.slice(1);
+  say(lines[0], G.dlgDur);
 }
 
 function startGame() {
@@ -240,10 +264,16 @@ function startGame() {
   G.blinkPhase = 0;
   G.endingT = 0;
   G.fwTimer = 0;
-  G.flags = { cat: false, woman: false, womanGone: false, dog: false, ticket: false, meeting: false };
-  G.woman = { x: 800, face: -1, run: false };
+  G.sky = 'night';
+  G.zone = 'city';
+  G.dlgQ = null;
+  G.card = null;
+  G.scene = null;
+  G.flash = 0;
+  G.flags = { cat: false, woman: false, womanGone: false, letter: false, dirDown: false, dog: false, ticket: false, meeting: false };
+  G.woman = { x: 900, face: -1, run: false };
   music('street');
-  say('앙꼬와 함께 걷는 길', 2.4);
+  say('길을 걷는다.', 2.0);
 }
 
 function startTransition(next) {
@@ -260,16 +290,16 @@ function enterWorld(next) {
     say('대전역 · 부산행 무궁화호', 3.0);
   } else if (next === 'busan') {
     G.world = 'busan';
-    G.player.x = 1040;
+    G.player.x = 200;
     G.player.y = GY - 24;
-    G.player.face = -1;
+    G.player.face = 1;
     G.player.vx = 0;
-    G.cam = clamp(G.player.x - W * 0.38, 0, BUSAN_LEN - W);
+    G.cam = 0;
     G.trail = [];
     for (var i = 0; i < 90; i++) {
-      G.trail.push({ x: G.player.x + (90 - i) * 0.8, y: G.player.y, face: -1, ph: 0 });
+      G.trail.push({ x: G.player.x - (90 - i) * 0.8, y: G.player.y, face: 1, ph: 0 });
     }
-    G.woman = { x: 250, face: 1, run: false };
+    G.woman = { x: 980, face: -1, run: false };
     music('busan');
     say('부산이다. 처음 와본다.', 3.0);
   } else if (next === 'ending') {
@@ -277,15 +307,24 @@ function enterWorld(next) {
     G.world = 'ending';
     G.endingT = 0;
     G.parts = [];
+    G.fwTimer = 0;
     music('ending');
   }
 }
 
-/* ---------- update ---------- */
 function update(dt) {
   G.t += dt;
   if (G.toast.t > 0) G.toast.t -= dt;
+  else if (G.dlgQ && G.dlgQ.length) say(G.dlgQ.shift(), G.dlgDur);
   if (G.lock > 0) G.lock -= dt;
+  if (G.flash > 0) G.flash = Math.max(0, G.flash - dt * 3.2);
+
+  if (G.card) {
+    G.card.t += dt;
+    if (G.card.sky && G.card.t > G.card.dur * 0.55) G.sky = G.card.sky;
+    if (G.card.t >= G.card.dur) G.card = null;
+  }
+  if (G.scene) updateScene(dt);
 
   if (G.trans) {
     G.trans.t += dt;
@@ -306,9 +345,18 @@ function update(dt) {
   updateParts(dt);
 }
 
+function updateScene(dt) {
+  var s = G.scene;
+  s.t += dt;
+  if (s.type === 'hospital') {
+    if (s.t > 1.2 && !s.said) { s.said = true; sfx('heart'); }
+    if (s.t > 5.0) { G.scene = null; G.sky = 'night'; G.lock = 0; say('다다가 무사히 나았다.', 2.4); }
+  }
+}
+
 function updatePlayer(dt) {
   var p = G.player;
-  var canMove = G.lock <= 0 && !G.trans;
+  var canMove = G.lock <= 0 && !G.trans && !G.card && !G.scene;
   var speed = 100;
 
   if (canMove) {
@@ -344,124 +392,174 @@ function updatePlayer(dt) {
 function updateStreet(dt) {
   var p = G.player;
 
-  /* cat */
+  /* zone: city <-> lab */
+  var z = (p.x > 1200 && p.x < 1600) ? 'lab' : 'city';
+  if (z !== G.zone) { G.zone = z; G.flash = 1; }
+
+  /* 1. cat */
   if (!G.flags.cat) {
     var cat = { x: 380, y: GY - 52, w: 14, h: 8 };
-    var bob = Math.sin(G.t * 2.2) * 3;
-    cat.y += bob;
+    cat.y += Math.sin(G.t * 2.2) * 3;
     if (overlap(p, cat) || p.x > 520) {
       G.flags.cat = true;
       sfx('meow');
-      say('고양이를 얻었다. 이름은 앙꼬라 하자.', 3.4);
+      G.lock = 4.9;
+      G.cine = { type: 'cat', t: 0 };
+      sayQ(['날 키워라, 인간.', '...? 으...응. 이름은 앙꼬라 하자...'], 2.3);
+    }
+  }
+  if (G.cine && G.cine.type === 'cat') {
+    G.cine.t += dt;
+    if (G.cine.t > 4.7) {
+      G.cine = null;
+      G.card = { text: '(약 4년 후)', t: 0, dur: 2.3, sky: 'day' };
+      G.lock = 2.3;
     }
   }
 
-  /* woman encounter */
+  /* 2. woman */
   var wm = G.woman;
-  if (!G.flags.woman && p.x > wm.x - 110) {
+  if (!G.flags.woman && G.sky === 'day' && !G.card && !G.scene && p.x > wm.x - 110) {
     G.flags.woman = true;
     G.cine = { type: 'woman', t: 0 };
-    G.lock = 2.6;
+    G.lock = 7.4;
     wm.face = -1;
+    sayQ(['이상형이다...!', '꼭 사귀어야겠어!', '그럼 부산으로 오시든가염~^^'], 2.1);
   }
   if (G.cine && G.cine.type === 'woman') {
     G.cine.t += dt;
-    if (G.cine.t > 0.15 && !G.cine.said) { G.cine.said = true; say('?! 첫눈에 반했다.', 2.6); }
-    if (G.cine.t > 1.1) { wm.run = true; wm.face = 1; }
-    if (wm.run) {
-      wm.x += 460 * dt;
-      if (wm.x > 1640) G.flags.womanGone = true;
+    if (G.cine.t > 4.4 && !wm.run) { wm.run = true; wm.face = 1; sfx('whoosh'); }
+    if (wm.run) wm.x += 430 * dt;
+    if (wm.run && wm.x > 1250) {
+      G.flags.womanGone = true;
+      G.cine = null;
+      G.lock = 0;
+    } else if (G.cine.t > 7.6) {
+      G.flags.womanGone = true;
+      G.cine = null;
+      G.lock = 0;
     }
-    if (G.cine.t > 3.2) { G.cine = null; if (wm.x > 1400) G.flags.womanGone = true; }
   }
 
-  /* dog */
-  if (!G.flags.dog && !G.trans) {
-    var dog = { x: 1120, y: GY - 8, w: 14, h: 8 };
-    if (overlap(p, dog) || p.x > 1190) {
+  /* 3. resignation letter */
+  if (!G.flags.letter && p.x > 1090) {
+    G.flags.letter = true;
+    sfx('get');
+    say('연구소 사직서를 얻었다.', 2.6);
+  }
+
+  /* 4. director */
+  if (G.zone === 'lab' && G.flags.letter && !G.flags.dirDown && !G.cine && p.x > 1390) {
+    G.cine = { type: 'throw', t: 0 };
+    G.lock = 3.4;
+    sfx('paper');
+  }
+  if (G.cine && G.cine.type === 'throw') {
+    G.cine.t += dt;
+    if (G.cine.t > 0.42 && !G.cine.hit) {
+      G.cine.hit = true;
+      G.flags.dirDown = true;
+      sfx('boom');
+    }
+    if (G.cine.t > 0.95 && !G.cine.said) { G.cine.said = true; say('난 간다.', 2.2); }
+    if (G.cine.t > 3.3) { G.cine = null; G.lock = 0; G.sky = 'dusk'; }
+  }
+
+  /* 5. dog */
+  if (G.flags.dirDown && !G.flags.dog) {
+    var dog = { x: 1750, y: GY - 8, w: 14, h: 8 };
+    if (overlap(p, dog) || p.x > 1810) {
       G.flags.dog = true;
       sfx('bark');
-      say('이름은 多多인 모양이다.', 3.2);
+      G.lock = 7.0;
+      G.cine = { type: 'dog', t: 0 };
+      sayQ(['병원에 데려가라, 인간.', '으으응? 알았어.', '내 이름은 多多다.'], 2.1);
+    }
+  }
+  if (G.cine && G.cine.type === 'dog') {
+    G.cine.t += dt;
+    if (G.cine.t > 6.4) {
+      G.cine = null;
+      G.scene = { type: 'hospital', t: 0 };
+      G.lock = 5.2;
     }
   }
 
-  /* ticket */
-  if (!G.flags.ticket) {
-    var tk = { x: 1432, y: GY - 22, w: 10, h: 8 };
-    if (overlap(p, tk)) {
-      G.flags.ticket = true;
-      sfx('get');
-      say('대전 – 부산 행 티켓을 받았다.', 3.2);
-    }
+  /* 6. ticket */
+  if (!G.flags.ticket && p.x > 2000) {
+    G.flags.ticket = true;
+    sfx('get');
+    say('대전 – 부산 행 티켓을 받았다.', 2.6);
   }
 
-  if (p.x > 1790) startTransition('train');
+  /* 7. station */
+  if (p.x > 2400) { sfx('whistle'); startTransition('train'); }
 }
 
 function updateTrain(dt) {
   G.trainT += dt;
-  if (G.trainT > 8.2) startTransition('busan');
+  if (G.trainT > 8.6) startTransition('busan');
 }
 
 function updateBusan(dt) {
   var p = G.player, wm = G.woman;
 
-  if (!G.flags.meeting && Math.abs(p.x - wm.x) < 52) {
+  if (!G.flags.meeting && Math.abs(p.x - wm.x) < 50) {
     G.flags.meeting = true;
     G.cine = { type: 'meet', t: 0 };
-    G.lock = 3.0;
-    wm.face = 1;
+    G.lock = 9.0;
+    wm.face = -1;
+    p.face = 1;
+    sfx('heart');
+    sayQ(['부산에 왔어! 내가! 으아아아!', '어멋! 박력.', '- 여자친구를 얻었다. -'], 2.1);
   }
   if (G.cine && G.cine.type === 'meet') {
     G.cine.t += dt;
-    if (G.cine.t > 0.25 && !G.cine.said) {
-      G.cine.said = true;
-      say('여자친구다. 이름은 우다영이다.', 3.0);
-      sfx('heart');
-    }
-    if (G.cine.t > 0.4 && !G.cine.hearts) {
+    if (G.cine.t > 0.5 && !G.cine.hearts) {
       G.cine.hearts = true;
-      for (var i = 0; i < 16; i++) {
+      for (var i = 0; i < 14; i++) {
         G.parts.push({
           x: wm.x - G.cam + 6, y: GY - 30,
-          vx: (Math.random() - 0.5) * 30, vy: -40 - Math.random() * 40,
+          vx: (Math.random() - 0.5) * 26, vy: -34 - Math.random() * 36,
           life: 2.4, max: 2.4, col: '#ff8fb0', size: 2, heart: true
         });
       }
     }
-    if (G.cine.t > 2.4 && !G.cine.blink) { G.cine.blink = true; sfx('blink'); }
+    if (G.cine.t > 7.0 && !G.cine.blink) { G.cine.blink = true; sfx('blink'); }
   }
 
-  /* blink -> ending */
   if (G.cine && G.cine.blink) {
-    G.blink = Math.min(1, G.blink + dt * 1.6);
+    G.blink = Math.min(1, G.blink + dt * 1.4);
     if (G.blink >= 1) startTransition('ending');
   }
 }
 
 function updateEnding(dt) {
   G.endingT += dt;
+  if (G.endingT < 0.9) return;
   G.fwTimer -= dt;
-  if (G.endingT > 1.2 && G.fwTimer <= 0) {
-    G.fwTimer = 0.7;
-    firework(30 + Math.random() * 260, 24 + Math.random() * 70);
-  }
+  if (G.fwTimer > 0) return;
+  var rush = G.endingT > 7 ? 0.16 : 0.30;
+  G.fwTimer = rush + Math.random() * 0.22;
+  var n = 1 + (Math.random() < (G.endingT > 7 ? 0.8 : 0.35) ? 1 : 0);
+  for (var k = 0; k < n; k++) firework(24 + Math.random() * 272, 16 + Math.random() * 76, k > 0);
 }
 
-function firework(x, y) {
-  sfx('boom');
+function firework(x, y, quiet) {
+  if (!quiet) sfx('boom');
   var hue = Math.random();
   var cols = hue < 0.34 ? ['#ffd166', '#ff9f43', '#fff1b8'] :
     hue < 0.67 ? ['#ff8fb0', '#ff5c8a', '#ffd0dd'] : ['#9ad1ff', '#7ee0c0', '#e6f6ff'];
-  for (var i = 0; i < 54; i++) {
-    var a = (i / 54) * Math.PI * 2 + Math.random() * 0.16;
-    var sp = 60 + Math.random() * 110;
+  var cnt = 46 + ((Math.random() * 20) | 0);
+  for (var i = 0; i < cnt; i++) {
+    var a = (i / cnt) * Math.PI * 2 + Math.random() * 0.16;
+    var sp = 56 + Math.random() * 110;
     G.parts.push({
       x: x, y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-      life: 1.9, max: 1.9, col: cols[i % cols.length], size: 1 + (Math.random() < 0.35 ? 1 : 0)
+      life: 1.7, max: 1.7, col: cols[i % cols.length], size: 1 + (Math.random() < 0.3 ? 1 : 0)
     });
   }
-  G.parts.push({ x: x, y: y, vx: 0, vy: 0, life: 0.18, max: 0.18, col: '#fffbe8', size: 4 });
+  G.parts.push({ x: x, y: y, vx: 0, vy: 0, life: 0.16, max: 0.16, col: '#fffbe8', size: 4 });
 }
 
 function updateParts(dt) {
@@ -567,73 +665,138 @@ function drawSky(top, mid, bottom) {
 }
 
 function drawStreet() {
-  var c = G.cam;
-  drawSky('#151430', '#4c2b52', '#d9745f');
+  var c = G.cam, sky = G.sky, i, s, sx;
 
-  for (var i = 0; i < stars.length; i++) {
-    var s = stars[i];
-    var sx = ((s.x - c * s.p) % W + W) % W;
-    var tw = 0.35 + 0.65 * Math.abs(Math.sin(G.t * 1.7 + i));
-    ctx.globalAlpha = tw * s.p;
-    px(sx, s.y, 1, 1, '#fff3d6');
+  if (sky === 'day') {
+    drawSky('#63b8e8', '#a9d8f0', '#e9f4f4');
+    var sg = ctx.createRadialGradient(258, 24, 4, 258, 24, 30);
+    sg.addColorStop(0, 'rgba(255,248,220,.85)');
+    sg.addColorStop(1, 'rgba(255,248,220,0)');
+    ctx.fillStyle = sg; ctx.fillRect(224, 0, 70, 70);
+    px(254, 20, 12, 12, '#fff8e0');
+  } else if (sky === 'dusk') {
+    drawSky('#2b2a54', '#7a4a68', '#ffa066');
+    for (i = 0; i < stars.length; i += 3) {
+      s = stars[i];
+      px(((s.x - c * s.p) % W + W) % W, s.y, 1, 1, 'rgba(255,243,214,.45)');
+    }
+  } else {
+    drawSky('#151430', '#42294c', '#a86a5c');
+    for (i = 0; i < stars.length; i++) {
+      s = stars[i];
+      sx = ((s.x - c * s.p) % W + W) % W;
+      ctx.globalAlpha = s.p;
+      px(sx, s.y, 1, 1, '#fff3d6');
+    }
+    ctx.globalAlpha = 1;
+    px(252 - c * 0.12 | 0, 16, 22, 22, '#ffe9c4');
+    px(250 - c * 0.12 | 0, 18, 26, 18, '#ffe9c4');
+    px(248 - c * 0.12 | 0, 22, 30, 10, '#ffe9c4');
   }
-  ctx.globalAlpha = 1;
 
-  px(252 - c * 0.12 | 0, 16, 22, 22, '#ffe9c4');
-  px(250 - c * 0.12 | 0, 18, 26, 18, '#ffe9c4');
-  px(248 - c * 0.12 | 0, 22, 30, 10, '#ffe9c4');
-  px(252 - c * 0.12 | 0, 16, 22, 5, '#ffd9a0');
+  var farC = sky === 'day' ? '#8cb2c9' : sky === 'dusk' ? '#4b3453' : '#2a2240';
+  var nearC = sky === 'day' ? '#6d8ba4' : sky === 'dusk' ? '#33253f' : '#221c36';
+  var edge = sky === 'day' ? '#a7c4d6' : sky === 'dusk' ? '#5d4260' : '#3a3055';
 
   for (var f = 0; f < farCity.length; f++) {
     var b = farCity[f];
     var bx = b.x - c * 0.28;
     if (bx > W || bx + b.w < -10) continue;
-    px(bx, GY - b.h, b.w, b.h, '#2c2440');
-    px(bx, GY - b.h, b.w, 2, '#3a3055');
+    px(bx, GY - b.h, b.w, b.h, farC);
+    px(bx, GY - b.h, b.w, 2, edge);
   }
   for (var n = 0; n < nearCity.length; n++) {
     var d = nearCity[n];
     var nx = d.x - c * 0.6;
     if (nx > W || nx + d.w < -10) continue;
-    px(nx, GY - d.h, d.w, d.h, '#231d38');
-    for (var wy = GY - d.h + 5; wy < GY - 6; wy += 8) {
-      for (var wx = nx + 3; wx < nx + d.w - 3; wx += 6) {
-        if ((wx * 7 + wy * 3) % 11 < 4) px(wx, wy, 2, 2, '#ffd98a');
+    px(nx, GY - d.h, d.w, d.h, nearC);
+    if (sky === 'day') {
+      for (var dy = GY - d.h + 5; dy < GY - 6; dy += 9) {
+        for (var dx = nx + 4; dx < nx + d.w - 5; dx += 8) {
+          px(dx, dy, 3, 3, (dx * 5 + dy * 3) % 13 < 4 ? '#a9c4d3' : '#5b7891');
+        }
+      }
+    } else if (sky === 'dusk') {
+      for (var ey = GY - d.h + 6; ey < GY - 6; ey += 10) {
+        for (var ex = nx + 4; ex < nx + d.w - 5; ex += 9) {
+          px(ex, ey, 2, 3, (ex * 5 + ey * 7) % 17 < 4 ? '#7d5a52' : '#1e1730');
+        }
+      }
+    } else {
+      for (var wy = GY - d.h + 6; wy < GY - 6; wy += 10) {
+        for (var wx = nx + 4; wx < nx + d.w - 5; wx += 9) {
+          px(wx, wy, 2, 3, (wx * 5 + wy * 7) % 19 < 4 ? '#8f7550' : '#171230');
+        }
       }
     }
   }
 
-  px(0, GY, W, 12, '#39335a');
-  px(0, GY, W, 2, '#4d4673');
-  px(0, GY + 12, W, H - GY - 12, '#22203a');
+  px(0, GY, W, 12, sky === 'day' ? '#8e8fa0' : '#39335a');
+  px(0, GY, W, 2, sky === 'day' ? '#a9aab8' : '#4d4673');
+  px(0, GY + 12, W, H - GY - 12, sky === 'day' ? '#4c4d60' : '#22203a');
   for (var r = 0; r < 2; r++) {
     var base = r === 0 ? GY + 22 : GY + 32;
-    for (var x = -(c % 24) - 24; x < W; x += 24) px(x, base, 12, 2, '#312e4e');
+    for (var x = -(c % 24) - 24; x < W; x += 24) {
+      px(x, base, 12, 2, sky === 'day' ? '#5c5d72' : '#312e4e');
+    }
   }
 
-  var lamps = [120, 320, 520, 720, 920, 1220, 1420, 1620, 1820];
-  for (var l = 0; l < lamps.length; l++) {
-    var lx = lamps[l] - c;
-    if (lx < -20 || lx > W + 20) continue;
-    px(lx, GY - 52, 2, 52, '#191628');
-    px(lx - 1, GY - 54, 8, 3, '#191628');
-    px(lx - 2, GY - 52, 3, 3, '#ffe08a');
-    ctx.globalAlpha = 0.12;
-    ctx.fillStyle = '#ffcf7a';
-    ctx.beginPath();
-    ctx.ellipse(lx + 1, GY - 50, 7, 5, 0, 0, 7);
-    ctx.fill();
-    ctx.globalAlpha = 1;
+  if (sky !== 'day') {
+    var lamps = [120, 320, 520, 720, 920, 1220, 1420, 1620, 1820, 2020, 2220];
+    for (var l = 0; l < lamps.length; l++) {
+      var lx = lamps[l] - c;
+      if (lx < -20 || lx > W + 20) continue;
+      px(lx, GY - 52, 2, 52, sky === 'dusk' ? '#241f30' : '#191628');
+      px(lx - 1, GY - 54, 8, 3, sky === 'dusk' ? '#241f30' : '#191628');
+      px(lx - 2, GY - 52, 3, 3, sky === 'dusk' ? '#ffcd8a' : '#ffe08a');
+      ctx.globalAlpha = 0.10;
+      ctx.fillStyle = '#ffcf7a';
+      ctx.beginPath();
+      ctx.ellipse(lx + 1, GY - 50, 7, 5, 0, 0, 7);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
   }
 
-  var fence = [520, 1400];
+  var fence = [560, 1900];
   for (var q = 0; q < fence.length; q++) {
     for (var fx = fence[q] - c; fx < fence[q] + 90 - c; fx += 8) {
       if (fx < -10 || fx > W) continue;
-      px(fx, GY - 14, 2, 14, '#4a4468');
+      px(fx, GY - 14, 2, 14, sky === 'day' ? '#7a7b90' : '#4a4468');
     }
-    px(fence[q] - c, GY - 12, 88, 1, '#4a4468');
-    px(fence[q] - c, GY - 6, 88, 1, '#4a4468');
+    px(fence[q] - c, GY - 12, 88, 1, sky === 'day' ? '#7a7b90' : '#4a4468');
+    px(fence[q] - c, GY - 6, 88, 1, sky === 'day' ? '#7a7b90' : '#4a4468');
+  }
+}
+
+function drawLab() {
+  px(0, 0, W, H, '#191725');
+  for (var x = 0; x < W; x += 34) px(x, 16, 1, GY - 16, '#232033');
+  px(0, 0, W, 15, '#1e1c2b');
+  for (var i = 0; i < 4; i++) {
+    var lx = 28 + i * 80;
+    px(lx, 7, 24, 2, '#dfe7ff');
+    ctx.globalAlpha = 0.07;
+    ctx.fillStyle = '#cfe0ff';
+    ctx.beginPath();
+    ctx.moveTo(lx, 9); ctx.lineTo(lx + 24, 9); ctx.lineTo(lx + 38, GY); ctx.lineTo(lx - 14, GY);
+    ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  px(0, GY, W, H - GY, '#2a2737');
+  px(0, GY, W, 2, '#3e3a52');
+
+  var base = Math.floor(G.cam / 130) * 130;
+  for (var d = -1; d < 4; d++) {
+    var dx = base + d * 130 - G.cam;
+    if (dx < -60 || dx > W + 10) continue;
+    px(dx + 8, GY - 20, 44, 3, '#3b3b4f');
+    px(dx + 11, GY - 17, 3, 17, '#31303f');
+    px(dx + 46, GY - 17, 3, 17, '#31303f');
+    px(dx + 14, GY - 33, 26, 13, '#12161f');
+    px(dx + 16, GY - 31, 22, 9, '#22465c');
+    px(dx + 18, GY - 29, 18, 1, '#5fd0e8');
+    px(dx + 18, GY - 26, 8, 1, '#3d7f92');
   }
 }
 
@@ -685,71 +848,79 @@ function drawBusan() {
 }
 
 function drawTrain() {
-  var c = G.t, scroll = c * 130;
-  drawSky('#1a2340', '#3d4b74', '#8e8fb4');
+  var sh = Math.sin(G.t * 11) * 0.5;
+  ctx.save();
+  ctx.translate(0, sh | 0);
 
-  for (var i = 0; i < 5; i++) {
-    var x = ((i * 120 - scroll * 0.5) % 480 + 480) % 480 - 80;
-    px(x, 108, 90, 30, '#242e4e');
-    px(x + 70, 96, 24, 42, '#242e4e');
+  var g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#cdb99c'); g.addColorStop(0.55, '#e8d8bc'); g.addColorStop(1, '#bfa98c');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+  px(0, 0, W, 12, '#a08a6c');
+  for (var i = 0; i < 3; i++) px(52 + i * 88, 4, 32, 3, '#fff6e0');
+
+  px(30, 20, 260, 5, '#8f7a5c');
+  px(44, 14, 26, 7, '#6b5a70');
+  px(78, 15, 20, 6, '#6b5a70');
+  px(206, 13, 30, 8, '#5c4f66');
+  px(246, 15, 18, 6, '#6b5a70');
+
+  var wx = 42, wy = 30, ww = 236, wh = 66;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(wx, wy, ww, wh); ctx.clip();
+  var sg = ctx.createLinearGradient(0, wy, 0, wy + wh);
+  sg.addColorStop(0, '#ffcf9e'); sg.addColorStop(0.5, '#ffb27a'); sg.addColorStop(1, '#ffd9b0');
+  ctx.fillStyle = sg; ctx.fillRect(wx, wy, ww, wh);
+
+  var sc = G.t * 520;
+  for (var h = 0; h < 5; h++) {
+    var hx = ((h * 74 - sc * 0.25) % 370 + 370) % 370 + wx - 40;
+    ctx.fillStyle = '#8a5a63';
+    ctx.beginPath(); ctx.moveTo(hx, wy + wh - 16);
+    ctx.lineTo(hx + 34, wy + wh - 34); ctx.lineTo(hx + 68, wy + wh - 16);
+    ctx.closePath(); ctx.fill();
   }
-  for (var j = 0; j < 8; j++) {
-    var hx = ((j * 90 - scroll) % 400 + 400) % 400 - 60;
-    px(hx, 118, 26, 20, '#2c3556');
-    px(hx + 4, 124, 4, 4, '#ffd98a');
+  px(wx, wy + wh - 22, ww, 22, '#6b4356');
+  for (var p = 0; p < 7; p++) {
+    var pxx = ((p * 46 - sc) % 322 + 322) % 322 + wx - 20;
+    px(pxx, wy + 12, 2, wh - 30, '#4e3242');
+    px(pxx - 12, wy + 14, 26, 1, '#4e3242');
   }
-  px(0, 126, W, 8, '#2a3252');
-  for (var m = -(scroll % 40) - 40; m < W; m += 40) px(m, 129, 20, 2, '#39426a');
-
-  var bob = Math.sin(G.t * 7) * 0.6;
-  var ty = 66 + bob;
-  px(26, ty + 46, 268, 4, 'rgba(0,0,0,.35)');
-
-  rrect(24, ty, 272, 48, 6, '#e6ebf7', '#b9c3da');
-  px(24, ty + 30, 272, 6, '#6ab7c9');
-  px(24, ty + 42, 272, 3, '#c9d2e4');
-  px(24, ty + 6, 272, 2, '#f6f9ff');
-
-  for (var w2 = 0; w2 < 5; w2++) {
-    var wx = 36 + w2 * 52;
-    px(wx, ty + 8, 40, 20, '#8ec8d8');
-    px(wx, ty + 8, 40, 2, '#b8e2ec');
-    if (w2 === 2) {
-      px(wx + 14, ty + 16, 12, 12, '#2a2333');
-      px(wx + 17, ty + 12, 6, 5, '#2a2333');
-      px(wx + 17, ty + 15, 6, 3, '#f7cfa8');
-      px(wx + 18, ty + 16, 1, 1, '#2a2333');
-      px(wx + 21, ty + 16, 1, 1, '#2a2333');
-    }
+  for (var m = 0; m < 6; m++) {
+    var my = ((m * 40 - sc * 1.6) % 240 + 240) % 240 + wx - 20;
+    px(my, wy + 34 + (m % 3) * 7, 30, 1, 'rgba(255,255,255,.30)');
   }
+  ctx.restore();
 
-  px(24, ty + 36, 272, 3, '#d34a55');
-  px(292, ty + 4, 4, 40, '#c9d2e4');
+  rrect(wx - 3, wy - 3, ww + 6, wh + 6, 4, null, '#8d7c64');
+  px(wx + ww / 2 - 1, wy, 2, wh, '#9b896e');
+  px(wx - 3, wy + wh / 2 - 1, ww + 6, 2, '#9b896e');
 
-  var wheelA = (scroll * 0.5) % 12;
-  for (var w3 = 0; w3 < 4; w3++) {
-    var cx = 62 + w3 * 70, cy = ty + 52;
-    ctx.fillStyle = '#2b2b3a';
-    ctx.beginPath(); ctx.arc(cx, cy, 6, 0, 7); ctx.fill();
-    ctx.fillStyle = '#565a70';
-    ctx.beginPath(); ctx.arc(cx, cy, 3, 0, 7); ctx.fill();
-    px(cx - 1 + ((wheelA + w3) % 6) - 3, cy - 4, 1, 8, '#767b94');
-  }
+  px(14, 88, W - 28, 14, '#6a5c75');
+  px(14, 88, W - 28, 2, '#867592');
+  for (var cu = 0; cu < 6; cu++) px(28 + cu * 48, 103, 44, 21, cu % 2 ? '#84739a' : '#7a6a86');
+  px(14, 124, W - 28, 7, '#5d4f68');
+  px(14, 100, W - 28, 3, '#a592b0');
 
-  for (var sp = 0; sp < 6; sp++) {
-    var sx = ((sp * 70 - scroll * 2) % 420 + 420) % 420;
-    px(sx, 40 + (sp % 3) * 8, 26, 1, 'rgba(255,255,255,.25)');
-  }
+  drawBoy(72, 128, Math.sin(G.t * 3) * 0.3, 1);
+  if (G.flags.cat) drawCat(102, 92, 1);
+  if (G.flags.dog) drawDog(152, 94, 1);
 
-  var sit = G.t % 4;
+  px(240, 96, 34, 30, '#6f6079');
+  px(243, 99, 28, 22, '#8a7795');
+  px(258, 96, 2, 30, '#5d4f68');
+
+  px(0, GY + 14, W, H - GY - 14, '#4b3f52');
+  for (var st = -(G.t * 120 % 26) - 26; st < W; st += 26) px(st, GY + 18, 14, 2, '#5f5266');
+
   ctx.font = '9px Galmuri11, monospace';
-  ctx.fillStyle = 'rgba(255,255,255,.85)';
+  ctx.fillStyle = 'rgba(90,66,54,.75)';
   ctx.textAlign = 'center';
-  ctx.fillText(sit < 2 ? '덜컹덜컹' : '. . .', W / 2, 145);
+  ctx.fillText(G.t % 3 < 1.5 ? '덜컹덜컹' : '쿵덕 쿵덕', W / 2, 152);
   ctx.textAlign = 'left';
+  ctx.restore();
 }
 
-/* ---------- hud ---------- */
 function wrapText(text, maxW, font) {
   ctx.font = font;
   var out = [], line = '';
@@ -815,32 +986,72 @@ function drawTrailPets() {
 }
 
 function drawStreetWorld() {
-  drawStreet();
+  if (G.zone === 'lab') drawLab(); else drawStreet();
+  var c = G.cam;
 
   if (!G.flags.cat) {
     var cb = GY - 52 + Math.sin(G.t * 2.2) * 3;
-    ctx.globalAlpha = 0.14 + 0.10 * Math.sin(G.t * 4);
+    ctx.globalAlpha = 0.16;
     ctx.fillStyle = '#ffe6a8';
-    ctx.beginPath(); ctx.arc(385 - G.cam, cb + 4, 8, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(385 - c, cb + 4, 7, 0, 7); ctx.fill();
     ctx.globalAlpha = 1;
-    drawCat(380 - G.cam, cb, 1);
+    drawCat(380 - c, cb, 1);
     if (G.player.x > 260 && G.player.x < 380) {
       ctx.font = '8px Galmuri11, monospace';
       ctx.fillStyle = 'rgba(255,255,255,.85)';
       ctx.textAlign = 'center';
-      ctx.fillText('↑ 점프!', 380 - G.cam + 5, cb - 8);
+      ctx.fillText('↑ 점프!', 385 - c, cb - 8);
       ctx.textAlign = 'left';
     }
   }
 
+  if (!G.flags.letter && G.player.x < 1120) {
+    var lx2 = 1120 - c;
+    px(lx2 + 6, GY - 12, 4, 12, '#4a4468');
+    px(lx2 - 2, GY - 14, 20, 3, '#6a5f86');
+    var lf = Math.sin(G.t * 2) * 1;
+    px(lx2 + 2, GY - 24 + lf, 13, 9, '#f6f1e4');
+    px(lx2 + 2, GY - 24 + lf, 13, 1, '#d9cfbc');
+    px(lx2 + 2, GY - 20 + lf, 13, 1, '#c9576a');
+  }
+
+  if (G.player.x > 1060 && G.player.x < 1240) {
+    var dz = 1250 - c;
+    px(dz - 6, GY - 64, 54, 64, '#2f2b3e');
+    px(dz, GY - 58, 42, 58, '#12111c');
+    px(dz + 18, GY - 30, 6, 30, '#3a3752');
+    px(dz - 4, GY - 70, 50, 8, '#3c3850');
+    ctx.font = '8px Galmuri11, monospace';
+    ctx.fillStyle = '#9fe3ff';
+    ctx.textAlign = 'center';
+    ctx.fillText('연구소', dz + 21, GY - 63);
+    ctx.textAlign = 'left';
+  }
+
+  if (!G.flags.womanGone) {
+    var wm = G.woman;
+    drawWoman(wm.x - c, GY - 24, wm.face, wm.run ? G.t * 16 : 0);
+  }
+
+  if (G.zone === 'lab') {
+    drawDirector(1470 - c, GY - 24, G.flags.dirDown);
+    if (G.cine && G.cine.type === 'throw' && G.cine.t < 0.72) {
+      var pr = clamp(G.cine.t / 0.42, 0, 1);
+      var lx3 = G.player.x + (1470 - G.player.x) * pr;
+      var ly3 = G.player.y + 2 + (GY - 26 - G.player.y - 2) * pr - Math.sin(pr * Math.PI) * 24;
+      px(lx3 - c - 2, ly3, 11, 8, '#f6f1e4');
+      px(lx3 - c - 2, ly3 + 3, 11, 1, '#c9576a');
+    }
+  }
+
   if (!G.flags.dog) {
-    ctx.globalAlpha = 0.85;
-    drawDog(1120 - G.cam, GY - 8, -1);
+    ctx.globalAlpha = 0.9;
+    drawDog(1750 - c, GY - 8, -1);
     ctx.globalAlpha = 1;
   }
 
   if (!G.flags.ticket) {
-    var tx = 1424 - G.cam;
+    var tx = 2000 - c;
     px(tx + 8, GY - 14, 4, 14, '#4a4468');
     px(tx, GY - 16, 20, 3, '#6a5f86');
     var fly = Math.sin(G.t * 2) * 1.5;
@@ -849,42 +1060,37 @@ function drawStreetWorld() {
     px(tx + 9, GY - 26 + fly, 1, 7, '#d8cbb8');
   }
 
-  if (!G.flags.womanGone) {
-    var wm = G.woman;
-    drawWoman(wm.x - G.cam, GY - 24, wm.face, wm.run ? G.t * 16 : 0);
-  }
-
   drawTrailPets();
-  drawBoy(G.player.x - G.cam, G.player.y, G.player.ph, G.player.face);
+  drawBoy(G.player.x - c, G.player.y, G.player.ph, G.player.face);
 
-  if (G.player.x > 1660) {
-    var ax = 1820 - G.cam;
-    px(ax, GY - 60, 70, 60, '#2b2b48');
-    px(ax + 6, GY - 54, 58, 54, '#1b1b30');
-    px(ax + 30, GY - 34, 12, 34, '#ffd98a');
-    px(ax + 34, GY - 34, 4, 34, '#ffe9b8');
-    px(ax - 4, GY - 66, 78, 6, '#3b3b60');
+  if (G.player.x > 2240) {
+    var ax = 2400 - c;
+    px(ax, GY - 64, 74, 64, '#3a3550');
+    px(ax + 6, GY - 58, 62, 58, '#1b1b30');
+    px(ax + 32, GY - 36, 12, 36, '#ffd98a');
+    px(ax + 36, GY - 36, 4, 36, '#ffe9b8');
+    px(ax - 4, GY - 70, 82, 6, '#4b4568');
     ctx.font = '8px Galmuri11, monospace';
     ctx.fillStyle = '#ffe9b8';
     ctx.textAlign = 'center';
-    ctx.fillText('대전역', ax + 35, GY - 70);
+    ctx.fillText('대전역', ax + 37, GY - 74);
     ctx.textAlign = 'left';
   }
 }
 
 function drawBusanWorld() {
   drawBusan();
-  drawTrailPets();
   var wm = G.woman;
+  drawTrailPets();
   drawWoman(wm.x - G.cam, GY - 24, wm.face, 0);
   drawBoy(G.player.x - G.cam, G.player.y, G.player.ph, G.player.face);
 
-  if (!G.flags.meeting && G.player.x < 700) {
+  if (!G.flags.meeting && G.player.x < wm.x - 90) {
     ctx.font = '10px Galmuri11, monospace';
     ctx.fillStyle = 'rgba(255,255,255,' + (0.45 + 0.3 * Math.sin(G.t * 5)) + ')';
     ctx.textAlign = 'center';
-    ctx.fillText('◀', 40, 100);
-    ctx.fillText('◀', 24, 100);
+    ctx.fillText('▶', W - 26, 100);
+    ctx.fillText('▶', W - 42, 100);
     ctx.textAlign = 'left';
   }
 }
@@ -970,6 +1176,108 @@ function drawTitle() {
   ctx.textAlign = 'left';
 }
 
+/* ---------- extra scenes ---------- */
+function drawCard() {
+  var k = G.card.t / G.card.dur;
+  var a = Math.min(1, k * 6) * Math.min(1, (1 - k) * 6 + 0.15);
+  ctx.globalAlpha = Math.min(1, a);
+  px(0, 0, W, H, '#0b0a14');
+  ctx.globalAlpha = a;
+  ctx.textAlign = 'center';
+  ctx.font = '13px Galmuri11, monospace';
+  ctx.fillStyle = '#f3ecff';
+  ctx.fillText(G.card.text, W / 2, H / 2 - 2);
+  px(W / 2 - 26, H / 2 + 8, 52, 1, 'rgba(243,236,255,.35)');
+  ctx.textAlign = 'left';
+  ctx.globalAlpha = 1;
+}
+
+function drawScene() {
+  var s = G.scene, k = s.t;
+  var a = k < 0.6 ? k / 0.6 : k > 4.4 ? Math.max(0, 1 - (k - 4.4) / 0.6) : 1;
+  ctx.globalAlpha = Math.min(1, a);
+  px(0, 0, W, H, '#f2f6fb');
+  px(0, 132, W, H - 132, '#dfe7f0');
+  px(0, 132, W, 2, '#c7d3e0');
+
+  px(24, 24, 54, 44, '#cfe6f5');
+  px(27, 27, 48, 38, '#eaf7ff');
+  px(50, 24, 2, 44, '#cfe6f5');
+
+  px(206, 30, 16, 5, '#e4586e');
+  px(211, 25, 6, 15, '#e4586e');
+
+  px(88, 96, 4, 36, '#b8c4d2');
+  px(150, 96, 4, 36, '#b8c4d2');
+  px(84, 88, 74, 12, '#eef3f8');
+  px(84, 88, 74, 3, '#ffffff');
+  px(84, 96, 74, 14, '#9fd3c4');
+  px(84, 96, 74, 3, '#c2ecdf');
+  px(90, 86, 20, 8, '#ffffff');
+  drawDog(112, 90, 1);
+
+  px(176, 72, 3, 60, '#b8c4d2');
+  px(170, 66, 15, 8, '#dbe7f2');
+  px(180, 78, 1, 12, '#9fb2c4');
+
+  ctx.textAlign = 'center';
+  ctx.font = '11px Galmuri11, monospace';
+  ctx.fillStyle = '#3b4a5c';
+  ctx.fillText('다다가 무사히 나았다.', W / 2, 120);
+  ctx.font = '8px Galmuri11, monospace';
+  ctx.fillStyle = '#8b9aab';
+  ctx.fillText('동물병원', W / 2, 156);
+  ctx.textAlign = 'left';
+  ctx.globalAlpha = 1;
+}
+
+function drawDirector(x, y, down) {
+  ctx.save();
+  ctx.translate(x | 0, y | 0);
+  if (down) { ctx.translate(0, 24); ctx.rotate(Math.PI / 2); }
+  var hair = '#b8b3c2', coat = '#f4f6fb', coatD = '#cfd6e4', skin = '#f0c9a6',
+    shirt = '#2b2c3e', tie = '#a33a4e', pants = '#3a3b4e';
+  px(2, 0, 8, 3, hair);
+  px(1, 2, 10, 2, hair);
+  px(2, 4, 8, 4, skin);
+  px(3, 5, 2, 1, '#8fd0ff'); px(7, 5, 2, 1, '#8fd0ff');
+  px(3, 5, 1, 1, '#2b2b3a'); px(7, 5, 1, 1, '#2b2b3a');
+  px(5, 7, 2, 1, '#c9a184');
+  px(3, 8, 6, 8, coat);
+  px(4, 8, 4, 3, shirt);
+  px(5, 9, 2, 5, tie);
+  px(2, 9, 1, 6, coatD); px(9, 9, 1, 6, coatD);
+  px(3, 16, 6, 2, pants);
+  px(3, 18, 2, 5, pants); px(7, 18, 2, 5, pants);
+  px(3, 23, 2, 1, '#1e1d26'); px(7, 23, 2, 1, '#1e1d26');
+  ctx.restore();
+}
+
+function drawBoySit(x, y) {
+  ctx.save();
+  ctx.translate(x | 0, y | 0);
+  var skin = '#f7cfa8', hair = '#2a2333', shirt = '#eef3ff', shirtD = '#c3cfe8', pants = '#3b4670';
+  px(2, -13, 10, 13, shirt);
+  px(1, -12, 1, 9, shirtD); px(12, -12, 1, 9, shirtD);
+  px(2, -13, 10, 1, '#ffffff');
+  px(0, -11, 2, 6, shirt); px(0, -5, 2, 2, skin);
+  px(12, -11, 2, 3, shirt); px(13, -8, 2, 3, skin);
+  px(4, 0, 9, 4, pants);
+  px(4, 4, 2, 3, '#2f3959');
+  px(9, 4, 3, 17, pants);
+  px(9, 20, 6, 3, '#1e1d26');
+  px(2, 0, 3, 3, '#2f3959');
+  px(2, 3, 2, 16, pants);
+  px(2, 18, 5, 3, '#1e1d26');
+  px(3, -24, 9, 3, hair);
+  px(2, -22, 11, 9, skin);
+  px(3, -24, 10, 3, hair);
+  px(3, -20, 2, 2, '#2a2333'); px(9, -20, 2, 2, '#2a2333');
+  px(6, -17, 2, 1, '#dfa87e');
+  px(2, -22, 1, 7, hair); px(12, -22, 1, 5, hair);
+  ctx.restore();
+}
+
 /* ---------- render ---------- */
 function render() {
   if (G.mode === 'title') {
@@ -982,6 +1290,7 @@ function render() {
     else drawBusanWorld();
     drawParts();
     drawToast();
+    if (G.scene) drawScene();
     if (G.blink > 0) {
       var bh = (H / 2) * G.blink;
       px(0, 0, W, bh, '#08070e');
@@ -989,6 +1298,12 @@ function render() {
     }
   }
 
+  if (G.card) drawCard();
+  if (G.flash > 0) {
+    ctx.globalAlpha = Math.min(0.85, G.flash);
+    px(0, 0, W, H, '#0b0a14');
+    ctx.globalAlpha = 1;
+  }
   if (G.fade > 0) {
     ctx.globalAlpha = G.fade;
     px(0, 0, W, H, '#08070e');
@@ -998,6 +1313,7 @@ function render() {
 
 /* ---------- loop ---------- */
 var last = 0;
+
 function frame(now) {
   if (!last) last = now;
   var dt = Math.min(0.05, (now - last) / 1000);
@@ -1009,6 +1325,6 @@ function frame(now) {
 }
 
 /* start */
-G.flags = { cat: false, woman: false, womanGone: false, dog: false, ticket: false, meeting: false };
-G.woman = { x: 800, face: -1, run: false };
+G.flags = { cat: false, woman: false, womanGone: false, letter: false, dirDown: false, dog: false, ticket: false, meeting: false };
+G.woman = { x: 900, face: -1, run: false };
 requestAnimationFrame(frame);
