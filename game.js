@@ -240,24 +240,56 @@ var G = {
 
 var OBST = {
   street: [
-    { x: 560, type: 'puddle' }, { x: 1000, type: 'cone' }, { x: 1700, type: 'puddle' },
-    { x: 1900, type: 'cone' }, { x: 2150, type: 'puddle' }, { x: 2300, type: 'cone' }
+    { x: 560, type: 'puddle' }, { x: 760, type: 'bird' }, { x: 1000, type: 'cone' },
+    { x: 1280, type: 'bird' }, { x: 1700, type: 'puddle' }, { x: 2200, type: 'cone' },
+    { x: 2300, type: 'puddle' }, { x: 2380, type: 'bird' }
   ],
-  busan: [ { x: 420, type: 'puddle' }, { x: 700, type: 'cone' } ],
+  busan: [ { x: 420, type: 'puddle' }, { x: 560, type: 'bird' }, { x: 700, type: 'cone' } ],
   train: []
 };
-var OBST_SIZE = { puddle: { w: 22, h: 4 }, cone: { w: 9, h: 13 } };
+var OBST_SIZE = { puddle: { w: 22, h: 4 }, cone: { w: 9, h: 13 }, bird: { w: 12, h: 7 } };
 
-function say(text, dur) {
-  G.toast = { text: text, t: dur || 2.6 };
-  sfx('text');
+function obstBox(o) {
+  var sz = OBST_SIZE[o.type];
+  if (o.type === 'bird') {
+    var bx = o.x + Math.sin(G.t * 1.6 + o.x * 0.05) * 26;
+    return { x: bx - 7, y: GY - 37, w: sz.w, h: sz.h };
+  }
+  return { x: o.x, y: GY - sz.h, w: sz.w, h: sz.h };
 }
 
+function drawBird(x, y) {
+  var up = Math.sin(G.t * 9 + x * 0.3) > 0;
+  ctx.globalAlpha = 0.16;
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.ellipse(x + 6, GY - 1, 6, 2, 0, 0, 7); ctx.fill();
+  ctx.globalAlpha = 1;
+  px(x + 2, y + 2, 10, 4, '#26243a');
+  px(x + 8, y + 1, 4, 1, '#26243a');
+  px(x + 3, y + 3, 8, 2, '#ece9f6');
+  px(x + 4, y + 2, 7, 1, '#ece9f6');
+  px(x + 10, y + 2, 1, 1, '#26243a');
+  px(x + 12, y + 4, 2, 1, '#f0b45a');
+  if (up) { px(x, y - 1, 5, 2, '#9a93c4'); px(x + 1, y + 1, 3, 1, '#9a93c4'); }
+  else { px(x + 1, y + 6, 5, 2, '#9a93c4'); px(x + 2, y + 5, 3, 1, '#9a93c4'); }
+}
+
+var SPEAKER_COL = { me: '#ffffff', other: '#ffd97a', none: '#ffe9cf' };
+
+function say(text, dur, who) {
+  G.toast = { text: text, t: dur || 2.6, who: who || 'none' };
+  sfx('text');
+}
+function sayLine(l) {
+  if (typeof l === 'string') say(l, G.dlgDur);
+  else say(l.t, G.dlgDur, l.w);
+}
 function sayQ(lines, dur) {
   G.dlgDur = dur || 2.2;
   G.dlgQ = lines.slice(1);
-  say(lines[0], G.dlgDur);
+  sayLine(lines[0]);
 }
+function dialogDone() { return (!G.dlgQ || !G.dlgQ.length) && G.toast.t <= 0; }
 
 function startGame() {
   audioInit();
@@ -305,7 +337,7 @@ function enterWorld(next) {
     G.world = 'train';
     G.trainT = 0;
     G.toast.t = 0;
-    G.chap = { text: 'CH.6 · 부산행', t: 3.4 };
+    G.chap = { text: 'CH.8 · 부산행', t: 3.4 };
     music('train');
     say('대전역 · 부산행 무궁화호', 3.0);
   } else if (next === 'busan') {
@@ -320,9 +352,9 @@ function enterWorld(next) {
       G.trail.push({ x: G.player.x - (90 - i) * 0.8, y: G.player.y, face: 1, ph: 0 });
     }
     G.woman = { x: 980, face: -1, run: false };
-    G.chap = { text: 'CH.7 · 부산', t: 3.4 };
+    G.chap = { text: 'CH.9 · 부산', t: 3.4 };
     music('busan');
-    say('부산이다. 처음 와본다.', 3.0);
+    say('부산이다. 처음 와본다.', 3.0, 'me');
   } else if (next === 'ending') {
     G.mode = 'end';
     G.world = 'ending';
@@ -336,7 +368,7 @@ function enterWorld(next) {
 function update(dt) {
   G.t += dt;
   if (G.toast.t > 0) G.toast.t -= dt;
-  else if (G.dlgQ && G.dlgQ.length) say(G.dlgQ.shift(), G.dlgDur);
+  else if (G.dlgQ && G.dlgQ.length) sayLine(G.dlgQ.shift());
   if (G.lock > 0) G.lock -= dt;
   if (G.flash > 0) G.flash = Math.max(0, G.flash - dt * 3.2);
   if (G.chap.t > 0) G.chap.t -= dt;
@@ -381,7 +413,7 @@ function updateScene(dt) {
       s.out = true;
       startTransition(function () {
         G.scene = null; G.sky = 'night'; G.lock = 1.2; G.flags.dogOut = true;
-        G.chap = { text: 'CH.5 · 다시, 길 위', t: 3.2 };
+        G.chap = { text: 'CH.6 · 다시, 길 위', t: 3.2 };
         say('다다가 무사히 나았다.', 2.4);
       });
     }
@@ -429,17 +461,23 @@ function updateObstacles(dt) {
   var list = OBST[G.world] || [];
   var p = G.player;
   for (var i = 0; i < list.length; i++) {
-    var o = list[i], sz = OBST_SIZE[o.type];
-    if (overlap(p, { x: o.x, y: GY - sz.h, w: sz.w, h: sz.h })) {
+    var o = list[i], box = obstBox(o);
+    if (overlap(p, box)) {
+      var bird = o.type === 'bird';
       G.hits++;
       G.bumpCd = 1.2;
       G.lock = 0.55;
-      p.x -= p.face * 8;
-      p.vy = -170;
+      p.x -= p.face * (bird ? 12 : 8);
+      p.vy = bird ? -40 : -170;
       p.ground = false;
       sfx('bump');
       for (var k = 0; k < 6; k++) {
-        G.parts.push({ x: o.x + Math.random() * sz.w, y: GY - 2, vx: (Math.random() - 0.5) * 70, vy: -Math.random() * 70, life: 0.45, max: 0.45, col: o.type === 'puddle' ? '#8fc6e0' : '#e0913f', size: 1 });
+        G.parts.push({
+          x: box.x + Math.random() * box.w, y: bird ? box.y + 3 : GY - 2,
+          vx: (Math.random() - 0.5) * 70, vy: bird ? -Math.random() * 30 : -Math.random() * 70,
+          life: 0.45, max: 0.45, size: 1,
+          col: o.type === 'puddle' ? '#8fc6e0' : bird ? '#cfc9e0' : '#e0913f'
+        });
       }
       break;
     }
@@ -449,9 +487,11 @@ function updateObstacles(dt) {
 function drawObstacles(c) {
   var list = OBST[G.world] || [];
   for (var i = 0; i < list.length; i++) {
-    var o = list[i], x = o.x - c;
+    var o = list[i], box = obstBox(o), x = box.x - c;
     if (x < -34 || x > W + 30) continue;
-    if (o.type === 'puddle') {
+    if (o.type === 'bird') {
+      drawBird(x, box.y);
+    } else if (o.type === 'puddle') {
       ctx.fillStyle = '#202d49';
       ctx.beginPath(); ctx.ellipse(x + 11, GY - 2, 11, 3.5, 0, 0, 7); ctx.fill();
       ctx.fillStyle = '#456e9e';
@@ -496,14 +536,20 @@ function updateStreet(dt) {
     if (overlap(p, cat) || p.x > 520) {
       G.flags.cat = true;
       sfx('meow');
-      G.lock = 4.9;
+      G.lock = 22;
       G.cine = { type: 'cat', t: 0 };
-      sayQ(['날 키워라, 인간.', '...? 으...응. 이름은 앙꼬라 하자...'], 2.3);
+      sayQ([
+        { t: '날 키워라, 인간.', w: 'other' },
+        { t: '....? 으..응?', w: 'me' },
+        { t: '이름은...그러니까...', w: 'me' },
+        { t: '터퀴시...앙고라...', w: 'me' },
+        { t: '줄여서 앙꼬라 하자!', w: 'me' }
+      ], 1.8);
     }
   }
   if (G.cine && G.cine.type === 'cat') {
     G.cine.t += dt;
-    if (G.cine.t > 4.7) {
+    if (G.cine.t > 1 && dialogDone()) {
       G.cine = null;
       G.card = { text: '(약 4년 후)', t: 0, dur: 2.3, sky: 'day' };
       G.chap = { text: 'CH.2 · 그녀', t: 5.4 };
@@ -516,19 +562,24 @@ function updateStreet(dt) {
   if (!G.flags.woman && G.sky === 'day' && !G.card && !G.scene && p.x > wm.x - 110) {
     G.flags.woman = true;
     G.cine = { type: 'woman', t: 0 };
-    G.lock = 7.4;
+    G.lock = 24;
     wm.face = -1;
-    sayQ(['이상형이다...!', '꼭 사귀어야겠어!', '그럼 부산으로 오시든가염~^^'], 2.1);
+    sayQ([
+      { t: '이상형이다...!', w: 'me' },
+      { t: '꼭 사귀어야겠어!', w: 'me' },
+      { t: '대전은 넘 멀어서...', w: 'other' },
+      { t: '부산으로 오시던 가요~^^', w: 'other' }
+    ], 1.8);
   }
   if (G.cine && G.cine.type === 'woman') {
     G.cine.t += dt;
-    if (G.cine.t > 4.4 && !wm.run) { wm.run = true; wm.face = 1; sfx('whoosh'); }
+    if (G.cine.t > 1.5 && dialogDone() && !wm.run) { wm.run = true; wm.face = 1; sfx('whoosh'); }
     if (wm.run) wm.x += 430 * dt;
     if (wm.run && wm.x > 1250) {
       G.flags.womanGone = true;
       G.cine = null;
       G.lock = 0;
-    } else if (G.cine.t > 7.6) {
+    } else if (G.cine.t > 12) {
       G.flags.womanGone = true;
       G.cine = null;
       G.lock = 0;
@@ -546,8 +597,9 @@ function updateStreet(dt) {
   /* 4. director */
   if (G.zone === 'lab' && G.flags.letter && !G.flags.dirDown && !G.cine && p.x > 1390) {
     G.cine = { type: 'throw', t: 0 };
-    G.lock = 3.4;
+    G.lock = 5.2;
     sfx('paper');
+    say('날 막지마!!!', 2.0, 'other');
   }
   if (G.cine && G.cine.type === 'throw') {
     G.cine.t += dt;
@@ -556,8 +608,8 @@ function updateStreet(dt) {
       G.flags.dirDown = true;
       sfx('boom');
     }
-    if (G.cine.t > 0.95 && !G.cine.said) { G.cine.said = true; say('난 간다.', 2.2); }
-    if (G.cine.t > 3.3 && !G.cine.out) {
+    if (G.cine.t > 1.6 && !G.cine.said) { G.cine.said = true; say('아무도 날 막지 못하셈~', 2.0, 'other'); }
+    if (G.cine.t > 4.6 && !G.cine.out) {
       G.cine.out = true;
       startTransition(function () {
         G.cine = null; G.lock = 1.4; G.sky = 'dusk';
@@ -572,27 +624,41 @@ function updateStreet(dt) {
     if (overlap(p, dog) || p.x > 1810) {
       G.flags.dog = true;
       sfx('bark');
-      G.lock = 7.0;
+      G.lock = 24;
       G.cine = { type: 'dog', t: 0 };
-      sayQ(['병원에 데려가라, 인간.', '으으응? 알았어.', '내 이름은 다다다.'], 2.1);
+      sayQ([
+        { t: '병원에 데려가라, 인간.', w: 'other' },
+        { t: '으으응? 알았어.', w: 'me' },
+        { t: '내 이름은 다다다.', w: 'other' },
+        { t: '다다다?', w: 'me' },
+        { t: '다다! 쯧! 말귀를 못알아 들어...', w: 'other' },
+        { t: '미..미안...', w: 'me' }
+      ], 1.8);
     }
   }
   if (G.cine && G.cine.type === 'dog') {
     G.cine.t += dt;
-    if (G.cine.t > 6.4 && !G.cine.out) {
-      G.cine.out = true;
-      startTransition(function () {
-        G.cine = null;
-        G.scene = { type: 'hospital', t: 0 };
-        G.lock = 6.4;
-      });
+    if (G.cine.t > 1 && dialogDone()) {
+      G.cine = null;
+      G.lock = 0;
     }
   }
 
+  /* 5b. walk into the animal hospital */
+  if (G.flags.dog && !G.flags.dogOut && !G.trans && !G.scene && p.x > 1900) {
+    startTransition(function () {
+      G.player.x = 1930;
+      G.player.vx = 0;
+      G.scene = { type: 'hospital', t: 0 };
+      G.lock = 6.4;
+      G.chap = { text: 'CH.5 · 동물병원', t: 4.0 };
+    });
+  }
+
   /* 6. ticket */
-  if (!G.flags.ticket && p.x > 2000) {
+  if (!G.flags.ticket && p.x > 2060) {
     G.flags.ticket = true;
-    G.chap = { text: 'CH.5 · 대전역', t: 3.2 };
+    G.chap = { text: 'CH.7 · 대전역', t: 3.2 };
     sfx('get');
     say('대전 – 부산 행 티켓을 받았다.', 2.6);
   }
@@ -612,11 +678,15 @@ function updateBusan(dt) {
   if (!G.flags.meeting && Math.abs(p.x - wm.x) < 50) {
     G.flags.meeting = true;
     G.cine = { type: 'meet', t: 0 };
-    G.lock = 9.0;
+    G.lock = 20;
     wm.face = -1;
     p.face = 1;
     sfx('heart');
-    sayQ(['부산에 왔어! 내가! 으아아아!', '어멋! 박력.', '- 여자친구를 얻었다. -'], 2.1);
+    sayQ([
+      { t: '부산에 왔어! 내가! 으아아아!', w: 'me' },
+      { t: '어멋! 박력.', w: 'other' },
+      { t: '여자친구를 얻었다!', w: 'none' }
+    ], 1.8);
   }
   if (G.cine && G.cine.type === 'meet') {
     G.cine.t += dt;
@@ -630,7 +700,7 @@ function updateBusan(dt) {
         });
       }
     }
-    if (G.cine.t > 7.0 && !G.cine.blink) { G.cine.blink = true; sfx('blink'); }
+    if (G.cine.t > 1 && dialogDone() && !G.cine.blink) { G.cine.blink = true; sfx('blink'); }
   }
 
   if (G.cine && G.cine.blink) {
@@ -1088,7 +1158,7 @@ function drawToast() {
   rrect(14, y, W - 28, h, 3, 'rgba(12,10,22,.94)', 'rgba(255,214,170,.55)');
   px(14, y + h - 1, W - 28, 1, 'rgba(255,214,170,.25)');
   ctx.font = font;
-  ctx.fillStyle = '#ffe9cf';
+  ctx.fillStyle = SPEAKER_COL[G.toast.who] || '#ffe9cf';
   ctx.textAlign = 'center';
   for (var i = 0; i < lines.length; i++) ctx.fillText(lines[i], W / 2, y + 17 + i * 14);
   ctx.textAlign = 'left';
@@ -1195,7 +1265,7 @@ function drawStreetWorld() {
   }
 
   if (!G.flags.ticket) {
-    var tx = 2000 - c;
+    var tx = 2060 - c;
     px(tx + 8, GY - 14, 4, 14, '#4a4468');
     px(tx, GY - 16, 20, 3, '#6a5f86');
     var fly = Math.sin(G.t * 2) * 1.5;
@@ -1205,6 +1275,23 @@ function drawStreetWorld() {
   }
 
   drawObstacles(c);
+  {
+    var hx = 1878 - c;
+    px(hx - 6, GY - 66, 50, 66, '#463b52');
+    px(hx, GY - 60, 38, 60, '#e8e4f0');
+    px(hx + 2, GY - 58, 34, 16, '#cfdbe8');
+    px(hx + 15, GY - 56, 8, 3, '#d9534f');
+    px(hx + 18, GY - 59, 3, 9, '#d9534f');
+    px(hx + 8, GY - 40, 22, 40, '#201c2c');
+    px(hx + 10, GY - 38, 18, 38, '#332e46');
+    px(hx + 11, GY - 36, 16, 2, '#4b4463');
+    ctx.font = '9px Galmuri11, monospace';
+    ctx.fillStyle = '#ffd0d0';
+    ctx.textAlign = 'center';
+    ctx.fillText('동물병원', hx + 19, GY - 70);
+    ctx.textAlign = 'left';
+  }
+
   drawTrailPets();
   drawBoy(G.player.x - c, G.player.y, G.player.ph, G.player.face);
   if (G.lock > 0 && !G.card && !G.scene) drawAlert(G.player.x - c + 6, G.player.y);
