@@ -99,6 +99,7 @@ function sfx(name) {
       break;
     case 'paper': tone(1400, 0.05, { type: 'triangle', vol: 0.03 }); tone(900, 0.07, { type: 'triangle', vol: 0.025, when: 0.05 }); break;
     case 'whoosh': tone(300, 0.22, { type: 'sawtooth', vol: 0.03, slide: 2.2 }); break;
+    case 'bump': tone(160, 0.1, { type: 'square', vol: 0.07, slide: 0.6 }); tone(110, 0.14, { type: 'triangle', vol: 0.05, when: 0.05 }); break;
   }
 }
 
@@ -230,8 +231,22 @@ var G = {
   dlgDur: 2.2,
   card: null,
   scene: null,
-  flash: 0
+  flash: 0,
+  chap: { text: '', t: 0 },
+  dist: 0,
+  bumpCd: 0,
+  hits: 0
 };
+
+var OBST = {
+  street: [
+    { x: 560, type: 'puddle' }, { x: 1000, type: 'cone' }, { x: 1700, type: 'puddle' },
+    { x: 1900, type: 'cone' }, { x: 2150, type: 'puddle' }, { x: 2300, type: 'cone' }
+  ],
+  busan: [ { x: 420, type: 'puddle' }, { x: 700, type: 'cone' } ],
+  train: []
+};
+var OBST_SIZE = { puddle: { w: 22, h: 4 }, cone: { w: 9, h: 13 } };
 
 function say(text, dur) {
   G.toast = { text: text, t: dur || 2.6 };
@@ -270,7 +285,11 @@ function startGame() {
   G.card = null;
   G.scene = null;
   G.flash = 0;
-  G.flags = { cat: false, woman: false, womanGone: false, letter: false, dirDown: false, dog: false, ticket: false, meeting: false };
+  G.chap = { text: 'CH.1 · 대전, 어느 저녁', t: 3.4 };
+  G.dist = 0;
+  G.bumpCd = 0;
+  G.hits = 0;
+  G.flags = { cat: false, woman: false, womanGone: false, letter: false, dirDown: false, dog: false, dogOut: false, ticket: false, meeting: false };
   G.woman = { x: 900, face: -1, run: false };
   music('street');
   say('길을 걷는다.', 2.0);
@@ -286,6 +305,7 @@ function enterWorld(next) {
     G.world = 'train';
     G.trainT = 0;
     G.toast.t = 0;
+    G.chap = { text: 'CH.6 · 부산행', t: 3.4 };
     music('train');
     say('대전역 · 부산행 무궁화호', 3.0);
   } else if (next === 'busan') {
@@ -300,6 +320,7 @@ function enterWorld(next) {
       G.trail.push({ x: G.player.x - (90 - i) * 0.8, y: G.player.y, face: 1, ph: 0 });
     }
     G.woman = { x: 980, face: -1, run: false };
+    G.chap = { text: 'CH.7 · 부산', t: 3.4 };
     music('busan');
     say('부산이다. 처음 와본다.', 3.0);
   } else if (next === 'ending') {
@@ -318,6 +339,8 @@ function update(dt) {
   else if (G.dlgQ && G.dlgQ.length) say(G.dlgQ.shift(), G.dlgDur);
   if (G.lock > 0) G.lock -= dt;
   if (G.flash > 0) G.flash = Math.max(0, G.flash - dt * 3.2);
+  if (G.chap.t > 0) G.chap.t -= dt;
+  if (G.bumpCd > 0) G.bumpCd -= dt;
 
   if (G.card) {
     G.card.t += dt;
@@ -330,7 +353,10 @@ function update(dt) {
     G.trans.t += dt;
     if (G.trans.t < 0.5) G.fade = G.trans.t / 0.5;
     else {
-      if (!G.trans.done) { enterWorld(G.trans.next); G.trans.done = true; }
+      if (!G.trans.done) {
+        if (typeof G.trans.next === 'function') G.trans.next(); else enterWorld(G.trans.next);
+        G.trans.done = true;
+      }
       G.fade = 1 - (G.trans.t - 0.5) / 0.5;
     }
     if (G.trans.t >= 1) { G.trans = null; G.fade = 0; }
@@ -342,6 +368,7 @@ function update(dt) {
   else if (G.mode === 'end') updateEnding(dt);
 
   if (G.mode === 'play') updatePlayer(dt);
+  updateObstacles(dt);
   updateParts(dt);
 }
 
@@ -350,7 +377,14 @@ function updateScene(dt) {
   s.t += dt;
   if (s.type === 'hospital') {
     if (s.t > 1.2 && !s.said) { s.said = true; sfx('heart'); }
-    if (s.t > 5.0) { G.scene = null; G.sky = 'night'; G.lock = 0; say('다다가 무사히 나았다.', 2.4); }
+    if (s.t > 5.0 && !s.out) {
+      s.out = true;
+      startTransition(function () {
+        G.scene = null; G.sky = 'night'; G.lock = 1.2; G.flags.dogOut = true;
+        G.chap = { text: 'CH.5 · 다시, 길 위', t: 3.2 };
+        say('다다가 무사히 나았다.', 2.4);
+      });
+    }
   }
 }
 
@@ -378,7 +412,7 @@ function updatePlayer(dt) {
   p.y += p.vy * dt;
   if (p.y >= GY - p.h) { p.y = GY - p.h; p.vy = 0; p.ground = true; }
 
-  if (p.vx !== 0) p.ph += dt * 9;
+  if (p.vx !== 0) { p.ph += dt * 9; G.dist += Math.abs(p.vx) * dt; }
   else p.ph = 0;
 
   G.trail.push({ x: p.x, y: p.y, face: p.face, ph: p.ph });
@@ -387,6 +421,65 @@ function updatePlayer(dt) {
   var len = G.world === 'busan' ? BUSAN_LEN : STREET_LEN;
   var target = clamp(p.x - W * 0.38, 0, Math.max(0, len - W));
   G.cam += (target - G.cam) * Math.min(1, dt * 8);
+}
+
+function updateObstacles(dt) {
+  if (G.mode !== 'play' || G.world === 'train') return;
+  if (G.lock > 0 || G.trans || G.card || G.scene || G.bumpCd > 0) return;
+  var list = OBST[G.world] || [];
+  var p = G.player;
+  for (var i = 0; i < list.length; i++) {
+    var o = list[i], sz = OBST_SIZE[o.type];
+    if (overlap(p, { x: o.x, y: GY - sz.h, w: sz.w, h: sz.h })) {
+      G.hits++;
+      G.bumpCd = 1.2;
+      G.lock = 0.55;
+      p.x -= p.face * 8;
+      p.vy = -170;
+      p.ground = false;
+      sfx('bump');
+      for (var k = 0; k < 6; k++) {
+        G.parts.push({ x: o.x + Math.random() * sz.w, y: GY - 2, vx: (Math.random() - 0.5) * 70, vy: -Math.random() * 70, life: 0.45, max: 0.45, col: o.type === 'puddle' ? '#8fc6e0' : '#e0913f', size: 1 });
+      }
+      break;
+    }
+  }
+}
+
+function drawObstacles(c) {
+  var list = OBST[G.world] || [];
+  for (var i = 0; i < list.length; i++) {
+    var o = list[i], x = o.x - c;
+    if (x < -34 || x > W + 30) continue;
+    if (o.type === 'puddle') {
+      ctx.fillStyle = '#202d49';
+      ctx.beginPath(); ctx.ellipse(x + 11, GY - 2, 11, 3.5, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = '#456e9e';
+      ctx.beginPath(); ctx.ellipse(x + 11, GY - 2, 8, 2.2, 0, 0, 7); ctx.fill();
+      px(x + 5, GY - 4, 7, 1, '#9fd0e8');
+      if (Math.sin(G.t * 1.7 + i) > 0.55) px(x + 12, GY - 3, 4, 1, '#d6eeff');
+    } else {
+      px(x + 1, GY - 4, 7, 4, '#b0602a');
+      px(x, GY - 10, 9, 6, '#e8913f');
+      px(x + 2, GY - 13, 5, 3, '#f6ab58');
+      px(x + 1, GY - 7, 7, 2, '#fff0d0');
+    }
+  }
+}
+
+function drawHUD() {
+  var steps = Math.floor(G.dist / 9);
+  ctx.font = '8px Galmuri11, monospace';
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(214,208,236,.45)';
+  ctx.fillText(steps + ' 걸음', W - 6, 175);
+  ctx.textAlign = 'left';
+  if (G.chap.t > 0) {
+    var a = Math.min(1, G.chap.t * 2.2);
+    ctx.font = '9px Galmuri11, monospace';
+    ctx.fillStyle = 'rgba(255,226,180,' + a * 0.9 + ')';
+    ctx.fillText(G.chap.text, 6, 175);
+  }
 }
 
 function updateStreet(dt) {
@@ -413,6 +506,7 @@ function updateStreet(dt) {
     if (G.cine.t > 4.7) {
       G.cine = null;
       G.card = { text: '(약 4년 후)', t: 0, dur: 2.3, sky: 'day' };
+      G.chap = { text: 'CH.2 · 그녀', t: 5.4 };
       G.lock = 2.3;
     }
   }
@@ -444,6 +538,7 @@ function updateStreet(dt) {
   /* 3. resignation letter */
   if (!G.flags.letter && p.x > 1090) {
     G.flags.letter = true;
+    G.chap = { text: 'CH.3 · 사직서', t: 3.2 };
     sfx('get');
     say('연구소 사직서를 얻었다.', 2.6);
   }
@@ -462,7 +557,13 @@ function updateStreet(dt) {
       sfx('boom');
     }
     if (G.cine.t > 0.95 && !G.cine.said) { G.cine.said = true; say('난 간다.', 2.2); }
-    if (G.cine.t > 3.3) { G.cine = null; G.lock = 0; G.sky = 'dusk'; }
+    if (G.cine.t > 3.3 && !G.cine.out) {
+      G.cine.out = true;
+      startTransition(function () {
+        G.cine = null; G.lock = 1.4; G.sky = 'dusk';
+        G.chap = { text: 'CH.4 · 다다', t: 3.2 };
+      });
+    }
   }
 
   /* 5. dog */
@@ -478,16 +579,20 @@ function updateStreet(dt) {
   }
   if (G.cine && G.cine.type === 'dog') {
     G.cine.t += dt;
-    if (G.cine.t > 6.4) {
-      G.cine = null;
-      G.scene = { type: 'hospital', t: 0 };
-      G.lock = 5.2;
+    if (G.cine.t > 6.4 && !G.cine.out) {
+      G.cine.out = true;
+      startTransition(function () {
+        G.cine = null;
+        G.scene = { type: 'hospital', t: 0 };
+        G.lock = 6.4;
+      });
     }
   }
 
   /* 6. ticket */
   if (!G.flags.ticket && p.x > 2000) {
     G.flags.ticket = true;
+    G.chap = { text: 'CH.5 · 대전역', t: 3.2 };
     sfx('get');
     say('대전 – 부산 행 티켓을 받았다.', 2.6);
   }
@@ -873,71 +978,89 @@ function drawTrain() {
   ctx.save();
   ctx.translate(0, sh | 0);
 
-  var g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, '#cdb99c'); g.addColorStop(0.55, '#e8d8bc'); g.addColorStop(1, '#bfa98c');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  var g = ctx.createLinearGradient(0, 0, 0, 150);
+  g.addColorStop(0, '#d6c2a2'); g.addColorStop(0.6, '#e9dabe'); g.addColorStop(1, '#bfa98b');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, 150);
 
-  px(0, 0, W, 12, '#a08a6c');
-  for (var i = 0; i < 3; i++) px(52 + i * 88, 4, 32, 3, '#fff6e0');
+  px(0, 0, W, 13, '#8d7a5e');
+  px(0, 13, W, 2, '#ab9473');
+  for (var i = 0; i < 3; i++) {
+    var lx = 30 + i * 100;
+    px(lx, 3, 48, 4, '#fff6e0');
+    ctx.globalAlpha = 0.07;
+    ctx.fillStyle = '#fff6e0';
+    ctx.beginPath(); ctx.moveTo(lx, 7); ctx.lineTo(lx + 48, 7);
+    ctx.lineTo(lx + 74, 140); ctx.lineTo(lx - 26, 140); ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
 
-  px(30, 20, 260, 5, '#8f7a5c');
-  px(44, 14, 26, 7, '#6b5a70');
-  px(78, 15, 20, 6, '#6b5a70');
-  px(206, 13, 30, 8, '#5c4f66');
-  px(246, 15, 18, 6, '#6b5a70');
+  px(16, 17, W - 32, 4, '#8f7a5c');
+  px(24, 11, 30, 7, '#6b5a70');
+  px(60, 12, 22, 6, '#7d6a86');
+  px(214, 10, 34, 8, '#5c4f66');
+  px(254, 13, 20, 5, '#6b5a70');
 
-  var wx = 42, wy = 30, ww = 236, wh = 66;
+  var wx = 26, wy = 28, ww = 268, wh = 62;
   ctx.save();
   ctx.beginPath(); ctx.rect(wx, wy, ww, wh); ctx.clip();
   var sg = ctx.createLinearGradient(0, wy, 0, wy + wh);
-  sg.addColorStop(0, '#ffcf9e'); sg.addColorStop(0.5, '#ffb27a'); sg.addColorStop(1, '#ffd9b0');
+  sg.addColorStop(0, '#ffd3a4'); sg.addColorStop(0.5, '#ffb47c'); sg.addColorStop(1, '#ffdcb6');
   ctx.fillStyle = sg; ctx.fillRect(wx, wy, ww, wh);
 
   var sc = G.t * 520;
-  for (var h = 0; h < 5; h++) {
-    var hx = ((h * 74 - sc * 0.25) % 370 + 370) % 370 + wx - 40;
+  for (var h = 0; h < 6; h++) {
+    var hx = ((h * 74 - sc * 0.25) % 444 + 444) % 444 + wx - 70;
     ctx.fillStyle = '#8a5a63';
-    ctx.beginPath(); ctx.moveTo(hx, wy + wh - 16);
-    ctx.lineTo(hx + 34, wy + wh - 34); ctx.lineTo(hx + 68, wy + wh - 16);
+    ctx.beginPath(); ctx.moveTo(hx, wy + wh - 14);
+    ctx.lineTo(hx + 34, wy + wh - 32); ctx.lineTo(hx + 68, wy + wh - 14);
     ctx.closePath(); ctx.fill();
   }
-  px(wx, wy + wh - 22, ww, 22, '#6b4356');
-  for (var p = 0; p < 7; p++) {
-    var pxx = ((p * 46 - sc) % 322 + 322) % 322 + wx - 20;
-    px(pxx, wy + 12, 2, wh - 30, '#4e3242');
-    px(pxx - 12, wy + 14, 26, 1, '#4e3242');
+  px(wx, wy + wh - 18, ww, 18, '#6b4356');
+  for (var p = 0; p < 8; p++) {
+    var pxx = ((p * 46 - sc) % 368 + 368) % 368 + wx - 20;
+    px(pxx, wy + 8, 2, wh - 26, '#4e3242');
+    px(pxx - 12, wy + 10, 26, 1, '#4e3242');
   }
-  for (var m = 0; m < 6; m++) {
-    var my = ((m * 40 - sc * 1.6) % 240 + 240) % 240 + wx - 20;
-    px(my, wy + 34 + (m % 3) * 7, 30, 1, 'rgba(255,255,255,.30)');
+  for (var m = 0; m < 7; m++) {
+    var my = ((m * 40 - sc * 1.6) % 280 + 280) % 280 + wx - 20;
+    px(my, wy + 30 + (m % 3) * 8, 30, 1, 'rgba(255,255,255,.28)');
   }
   ctx.restore();
 
-  rrect(wx - 3, wy - 3, ww + 6, wh + 6, 4, null, '#8d7c64');
-  px(wx + ww / 2 - 1, wy, 2, wh, '#9b896e');
+  rrect(wx - 3, wy - 3, ww + 6, wh + 6, 3, null, '#8d7c64');
+  px(wx + ww / 3 - 1, wy, 2, wh, '#9b896e');
+  px(wx + ww * 2 / 3 - 1, wy, 2, wh, '#9b896e');
   px(wx - 3, wy + wh / 2 - 1, ww + 6, 2, '#9b896e');
 
-  px(14, 88, W - 28, 14, '#6a5c75');
-  px(14, 88, W - 28, 2, '#867592');
-  for (var cu = 0; cu < 6; cu++) px(28 + cu * 48, 103, 44, 21, cu % 2 ? '#84739a' : '#7a6a86');
-  px(14, 124, W - 28, 7, '#5d4f68');
-  px(14, 100, W - 28, 3, '#a592b0');
+  px(0, 96, W, 38, '#b9a488');
+  px(0, 96, W, 2, '#9d8768');
 
-  drawBoy(72, 128, Math.sin(G.t * 3) * 0.3, 1);
-  if (G.flags.cat) drawCat(102, 92, 1);
-  if (G.flags.dog) drawDog(152, 94, 1);
+  for (var sr = 0; sr < 2; sr++) {
+    var sx = sr ? 196 : 18;
+    var sw = sr ? 106 : 108;
+    px(sx, 100, sw, 18, '#6e5f7e');
+    px(sx, 100, sw, 2, '#8b78a0');
+    px(sx, 116, sw, 18, '#8b78a0');
+    px(sx, 116, sw, 2, '#a591b8');
+    px(sx, 132, sw, 6, '#4e425c');
+    px(sx + 4, 138, 4, 8, '#3d3448');
+    px(sx + sw - 8, 138, 4, 8, '#3d3448');
+    px(sx + sw - 10, 108, 8, 3, '#5a4c66');
+    for (var c = 1; c < 3; c++) px(sx + (sw / 3) * c, 116, 1, 16, '#7a6888');
+  }
 
-  px(240, 96, 34, 30, '#6f6079');
-  px(243, 99, 28, 22, '#8a7795');
-  px(258, 96, 2, 30, '#5d4f68');
+  px(0, 146, W, H - 146, '#4a3e52');
+  px(0, 146, W, 2, '#6a5a74');
+  for (var fl = 0; fl < 16; fl++) px(fl * 20 + 4, 158 + (fl % 2) * 8, 10, 2, '#584a62');
 
-  px(0, GY + 14, W, H - GY - 14, '#4b3f52');
-  for (var st = -(G.t * 120 % 26) - 26; st < W; st += 26) px(st, GY + 18, 14, 2, '#5f5266');
+  drawBoy(146, 126, Math.sin(G.t * 3) * 0.3, 1);
+  if (G.flags.cat) drawCat(108, 142, 1);
+  if (G.flags.dogOut) drawDog(178, 142, 1);
 
   ctx.font = '9px Galmuri11, monospace';
-  ctx.fillStyle = 'rgba(90,66,54,.75)';
+  ctx.fillStyle = 'rgba(255,236,212,.32)';
   ctx.textAlign = 'center';
-  ctx.fillText(G.t % 3 < 1.5 ? '덜컹덜컹' : '쿵덕 쿵덕', W / 2, 152);
+  ctx.fillText(G.t % 3 < 1.5 ? '덜컹덜컹' : '쿵덕 쿵덕', W / 2, 160);
   ctx.textAlign = 'left';
   ctx.restore();
 }
@@ -1000,7 +1123,7 @@ function drawTrailPets() {
     drawCat(p1.x - G.cam + 1, p1.y + 14 + Math.sin(G.t * 3) * 1.5, p1.face);
   }
   var i2 = G.trail.length - 64;
-  if (i2 >= 0 && G.flags.dog) {
+  if (i2 >= 0 && G.flags.dogOut) {
     var p2 = G.trail[i2];
     drawDog(p2.x - G.cam + 1, p2.y + 16, p2.face);
   }
@@ -1081,6 +1204,7 @@ function drawStreetWorld() {
     px(tx + 9, GY - 26 + fly, 1, 7, '#d8cbb8');
   }
 
+  drawObstacles(c);
   drawTrailPets();
   drawBoy(G.player.x - c, G.player.y, G.player.ph, G.player.face);
   if (G.lock > 0 && !G.card && !G.scene) drawAlert(G.player.x - c + 6, G.player.y);
@@ -1103,6 +1227,7 @@ function drawStreetWorld() {
 function drawBusanWorld() {
   drawBusan();
   var wm = G.woman;
+  drawObstacles(G.cam);
   drawTrailPets();
   drawWoman(wm.x - G.cam, GY - 24, wm.face, 0);
   drawBoy(G.player.x - G.cam, G.player.y, G.player.ph, G.player.face);
@@ -1142,7 +1267,7 @@ function drawEnding() {
   gl.addColorStop(1, 'rgba(255,207,138,0)');
   ctx.fillStyle = gl;
   ctx.beginPath(); ctx.ellipse(W / 2, fy - 10, 40, 26, 0, 0, 7); ctx.fill();
-  if (G.flags.dog) drawDog(bx + 30, fy - 8, 1);
+  if (G.flags.dogOut) drawDog(bx + 30, fy - 8, 1);
   if (G.flags.cat) drawCat(bx - 12, fy - 8, 1);
   drawBoy(bx, fy - 24, Math.sin(G.t * 2) * 0.35, 1);
   drawWoman(bx + 14, fy - 24, -1, Math.sin(G.t * 2 + 1) * 0.35);
@@ -1328,6 +1453,7 @@ function render() {
     else if (G.world === 'train') drawTrain();
     else drawBusanWorld();
     drawParts();
+    drawHUD();
     drawToast();
     if (G.scene) drawScene();
     if (G.blink > 0) {
