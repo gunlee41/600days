@@ -765,13 +765,13 @@ function updateStreet(dt) {
       }
       if (keys.jump || jumpEdge) {
         jumpEdge = false;
-        if (ddist >= 40 && ddist <= 210) {
+        if (ddist <= 210 && (cf.tired > 0 || ddist >= 40)) {
           cf.phase = 'aim'; cf.t = 0; cf.px = p.x; G.lock = 2.6;
           sfx('tick');
           sayQ([{ t: '[퇴사의 호흡...1형...]', w: 'none' }, { t: '[사직서 날리기!]', w: 'none' }], 1.1);
         } else if (cf.msgCd <= 0) {
           cf.msgCd = 1.4;
-          say(ddist < 40 ? '너무 가깝다!' : '너무 멀다!', 1.0, 'none');
+          say(ddist > 210 ? '너무 멀다!' : '아직이다! 숨을 고를 때를 노려라!', 1.0, 'none');
         }
       }
     } else if (cf.phase === 'aim') {
@@ -1805,7 +1805,7 @@ function render() {
     drawAch();
     if (G.cine && G.cine.type === 'throw' && G.cine.phase === 'chase') {
       var ddn = Math.abs(G.player.x - G.dirX);
-      var okRange = ddn >= 40 && ddn <= 210;
+      var okRange = ddn <= 210 && (G.cine.tired > 0 || ddn >= 40);
       if (G.achMsg.t <= 0) {
         var bw = 96, bx = (W - bw) / 2 | 0, by = 70;
         px(bx, by, bw, 3, 'rgba(12,10,22,.7)');
