@@ -765,13 +765,13 @@ function updateStreet(dt) {
       }
       if (keys.jump || jumpEdge) {
         jumpEdge = false;
-        if (ddist >= 55 && ddist <= 210) {
+        if (ddist >= 40 && ddist <= 210) {
           cf.phase = 'aim'; cf.t = 0; cf.px = p.x; G.lock = 2.6;
           sfx('tick');
           sayQ([{ t: '[퇴사의 호흡...1형...]', w: 'none' }, { t: '[사직서 날리기!]', w: 'none' }], 1.1);
         } else if (cf.msgCd <= 0) {
           cf.msgCd = 1.4;
-          say(ddist < 55 ? '너무 가깝다!' : '너무 멀다!', 1.0, 'none');
+          say(ddist < 40 ? '너무 가깝다!' : '너무 멀다!', 1.0, 'none');
         }
       }
     } else if (cf.phase === 'aim') {
@@ -1477,7 +1477,7 @@ function drawStreetWorld() {
     drawDirector(G.dirX - c, GY - 24 + bobY, G.flags.dirDown);
     if (tiredB) {
       ctx.font = '8px Galmuri11, monospace';
-      ctx.fillStyle = 'rgba(255,220,160,' + (0.55 + 0.45 * Math.sin(G.t * 6)) + ')';
+      ctx.fillStyle = 'rgba(255,236,190,' + (0.75 + 0.25 * Math.sin(G.t * 6)) + ')';
       ctx.textAlign = 'center';
       ctx.fillText('헉... 헉...', G.dirX - c + 6, GY - 60);
       ctx.textAlign = 'left';
@@ -1805,11 +1805,11 @@ function render() {
     drawAch();
     if (G.cine && G.cine.type === 'throw' && G.cine.phase === 'chase') {
       var ddn = Math.abs(G.player.x - G.dirX);
-      var okRange = ddn >= 55 && ddn <= 210;
+      var okRange = ddn >= 40 && ddn <= 210;
       if (G.achMsg.t <= 0) {
         var bw = 96, bx = (W - bw) / 2 | 0, by = 70;
         px(bx, by, bw, 3, 'rgba(12,10,22,.7)');
-        px(bx + (55 / 220) * bw, by, ((210 - 55) / 220) * bw, 3, 'rgba(255,214,120,.45)');
+        px(bx + (40 / 220) * bw, by, ((210 - 40) / 220) * bw, 3, 'rgba(255,214,120,.45)');
         px(bx + Math.min(bw - 3, (ddn / 220) * bw), by - 1, 3, 5, okRange ? '#8ef0a8' : '#ff9aa2');
       }
       if (okRange) {
