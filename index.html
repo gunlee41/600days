@@ -23,6 +23,16 @@ canvas{width:100%;height:100%;display:block;image-rendering:pixelated}
 #right{left:72px;bottom:8px}
 #jump{right:8px;bottom:8px;width:66px;height:66px;font-size:12px}
 #mute{right:6px;top:6px;width:28px;height:28px;border-radius:7px;font-size:12px}
+#achbox{position:absolute;left:6px;top:6px;z-index:3;font-size:10px;pointer-events:auto}
+#achBtn{font-family:inherit;font-size:10px;color:#ffd97a;background:rgba(20,18,32,.62);
+  border:1px solid rgba(255,214,120,.4);border-radius:5px;padding:3px 7px;cursor:pointer}
+#achBtn:hover{background:rgba(40,34,60,.85)}
+#achList{margin:4px 0 0;padding:5px 8px;list-style:none;background:rgba(12,10,22,.92);
+  border:1px solid rgba(255,214,120,.3);border-radius:5px;max-width:214px;
+  opacity:0;transform:translateY(-4px);transition:.15s;pointer-events:none}
+#achList li{padding:1px 0;color:#6f6a84;font-size:10px;line-height:14px}
+#achList li.on{color:#ffe9cf}
+#achbox:hover #achList,#achbox.open #achList{opacity:1;transform:none}
 #hint{position:absolute;left:0;right:0;bottom:-19px;text-align:center;color:#8d86a8;
   font-size:10px;letter-spacing:.5px;pointer-events:none}
 @media (hover:hover) and (pointer:fine){
@@ -49,6 +59,10 @@ canvas{width:100%;height:100%;display:block;image-rendering:pixelated}
     <button class="btn" id="jump" aria-label="jump">JUMP</button>
   </div>
   <button class="btn" id="mute" aria-label="mute">♪</button>
+  <div id="achbox">
+    <button id="achBtn">업적 <span id="achCount">0/7</span></button>
+    <ul id="achList"></ul>
+  </div>
   <div id="hint">← → 이동 · Space/↑ 점프 · M 음소거</div>
 </div></div>
 <script>
@@ -60,12 +74,15 @@ canvas{width:100%;height:100%;display:block;image-rendering:pixelated}
     st.style.width = (320 * s) + 'px';
     st.style.height = (180 * s) + 'px';
   }
+  document.getElementById('achBtn').addEventListener('click', function () {
+    document.getElementById('achbox').classList.toggle('open');
+  });
   addEventListener('resize', fit);
   addEventListener('orientationchange', function () { setTimeout(fit, 80); });
   fit();
 })();
 </script>
-<script src="logic.js?v=10"></script>
-<script src="game.js?v=10"></script>
+<script src="logic.js?v=11"></script>
+<script src="game.js?v=11"></script>
 </body>
 </html>
