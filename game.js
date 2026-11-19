@@ -268,6 +268,7 @@ var ACH_NAME = {
   skipDog: '[다다를 무시하다니: 다다를 주에 3회 이상 산책시키세요!]',
   bromance: '[브로맨스: ....숨은 취향 발견?!]',
   oldman: '[노인 공격! : 요즘 보기 드믄 젊은이다.]',
+  catbird: '[고양이 본능 발현]',
   steps: '[슈퍼 길치: 그냥 오른쪽으로만 가....]'
 };
 var ACH_LIST = [
@@ -278,7 +279,8 @@ var ACH_LIST = [
   { id: 'skipDog', name: '다다를 무시하다니', hint: '다다 지나치기' },
   { id: 'bromance', name: '브로맨스', hint: '원장에게 5회 피격' },
   { id: 'steps', name: '슈퍼 길치', hint: '410걸음' },
-  { id: 'oldman', name: '노인 공격!', hint: '쓰러진 원장 위 점프 5회' }
+  { id: 'oldman', name: '노인 공격!', hint: '쓰러진 원장 위 점프 5회' },
+  { id: 'catbird', name: '고양이 본능 발현', hint: '앙꼬가 새를 잡게 하기' }
 ];
 var achSig = '';
 
@@ -323,12 +325,14 @@ var OBST = {
   train: []
 };
 var OBST_SIZE = { puddle: { w: 22, h: 4 }, cone: { w: 9, h: 13 }, bird: { w: 12, h: 7 } };
+var OBST0 = JSON.parse(JSON.stringify(OBST));
 
 function obstBox(o) {
   var sz = OBST_SIZE[o.type];
   if (o.type === 'bird') {
     var bx = o.x + Math.sin(G.t * 1.6 + o.x * 0.05) * 26;
-    return { x: bx - 7, y: GY - 37, w: sz.w, h: sz.h };
+    var by = GY - 37 + Math.sin(G.t * 0.85 + o.x * 0.11) * 9;
+    return { x: bx - 7, y: by, w: sz.w, h: sz.h };
   }
   return { x: o.x, y: GY - sz.h, w: sz.w, h: sz.h };
 }
@@ -401,6 +405,7 @@ function startGame() {
   G.achMsg = { text: '', t: 0 };
   G.dirX = 1470;
   G.bossHits = 0;
+  OBST = JSON.parse(JSON.stringify(OBST0));
   syncAch();
   G.flags = { cat: false, woman: false, womanGone: false, letter: false, dirDown: false, dog: false, dogOut: false, ticket: false, meeting: false, warm: false };
   G.woman = { x: 900, face: -1, run: false };
@@ -483,6 +488,7 @@ function update(dt) {
 
   if (G.mode === 'play') updatePlayer(dt);
   updateObstacles(dt);
+  checkCatBird();
   updateParts(dt);
 }
 
@@ -580,6 +586,31 @@ function doorBlock(dir) {
   }
 }
 
+function checkCatBird() {
+  if (!G.flags.cat || G.mode !== 'play' || G.world === 'train') return;
+  var list = OBST[G.world] || [];
+  var p = G.player;
+  var cat = { x: p.x - 52, y: p.y + 12, w: 10, h: 10 };
+  for (var i = 0; i < list.length; i++) {
+    var o = list[i];
+    if (o.type !== 'bird' || o.gone) continue;
+    var cb = obstBox(o);
+    if (Math.abs(cb.x + cb.w / 2 - (cat.x + 5)) < 18) {
+      o.gone = true;
+      sfx('meow');
+      achUnlock('catbird');
+      for (var k = 0; k < 9; k++) {
+        G.parts.push({
+          x: o.x + (Math.random() - 0.5) * 16, y: GY - 44 + Math.random() * 10,
+          vx: (Math.random() - 0.5) * 60, vy: -Math.random() * 45,
+          life: 0.6, max: 0.6, size: 1, col: k % 2 ? '#ece9f6' : '#cfc9e0'
+        });
+      }
+      return;
+    }
+  }
+}
+
 function updateObstacles(dt) {
   if (G.mode !== 'play' || G.world === 'train') return;
   if (G.lock > 0 || G.trans || G.card || G.scene || G.bumpCd > 0) return;
@@ -587,6 +618,7 @@ function updateObstacles(dt) {
   var p = G.player;
   for (var i = 0; i < list.length; i++) {
     var o = list[i], box = obstBox(o);
+    if (o.gone) continue;
     if (overlap(p, box)) {
       var bird = o.type === 'bird';
       G.hits++;
@@ -615,7 +647,7 @@ function drawObstacles(c) {
   var list = OBST[G.world] || [];
   for (var i = 0; i < list.length; i++) {
     var o = list[i], box = obstBox(o), x = box.x - c;
-    if (x < -34 || x > W + 30) continue;
+    if (o.gone || x < -34 || x > W + 30) continue;
     if (o.type === 'bird') {
       drawBird(x, box.y);
     } else if (o.type === 'puddle') {
@@ -640,13 +672,24 @@ function drawHUD() {
     var lbl = (G.cine && G.cine.type === 'throw' && G.cine.phase === 'fight') ? '던지기' : 'JUMP';
     if (jb.textContent !== lbl) jb.textContent = lbl;
   }
-  if (G.cine && G.cine.type === 'throw' && G.cine.phase === 'fight' && G.cine.t < 3.4) {
+  if (G.cine && G.cine.type === 'throw' && G.cine.phase === 'fight' && G.cine.t < 3.4 && G.toast.t <= 0) {
     var hw2 = 214, hx2 = (W - hw2) / 2 | 0;
     rrect(hx2, 28, hw2, 15, 3, 'rgba(12,10,22,.9)', 'rgba(255,214,120,.5)');
     ctx.textAlign = 'center';
     ctx.font = '9px Galmuri11, monospace';
     ctx.fillStyle = 'rgba(255,236,190,.95)';
     ctx.fillText('던지기(점프키)로 사직서를 날려라!', W / 2, 38);
+    ctx.textAlign = 'left';
+  }
+  if (G.cine && G.cine.type === 'throw' && G.cine.phase === 'fight' && G.toast.t <= 0) {
+    var alive = 0;
+    for (var q = 0; q < G.foes.length; q++) if (!G.foes[q].down) alive++;
+    ctx.textAlign = 'center';
+    ctx.font = '9px Galmuri11, monospace';
+    ctx.fillStyle = 'rgba(20,16,32,.55)';
+    ctx.fillText('원장에게 사직서를 맞춰라!   남은 ' + alive, W / 2 + 1, 19);
+    ctx.fillStyle = 'rgba(255,236,190,.95)';
+    ctx.fillText('원장에게 사직서를 맞춰라!   남은 ' + alive, W / 2, 18);
     ctx.textAlign = 'left';
   }
   var steps = Math.floor(G.dist / 9);
@@ -743,6 +786,7 @@ function updateStreet(dt) {
     G.lock = 60;
     G.dirX = 1470;
     G.bossHits = 0;
+    G.foes = [{ x: 1470, y: GY - 24, vy: 0, dir: -1, speed: 70, down: false, isBoss: true, jumpCd: 0.8, ph: 0 }];
     sfx('tick');
     music('battle');
     sayQ([{ t: '자네는!', w: 'other' }, { t: '절대로!', w: 'other' }, { t: '계속!', w: 'other' }, { t: '내 노예야!!!', w: 'other' }], 1.0);
@@ -758,7 +802,6 @@ function updateStreet(dt) {
     if (cf.phase === 'talk') {
       if (dialogDone()) {
         cf.phase = 'fight'; cf.t = 0; G.lock = 0; sfx('whoosh');
-        G.foes = [{ x: 1470, y: GY - 24, vy: 0, dir: -1, speed: 70, down: false, isBoss: true, jumpCd: 0.8, ph: 0 }];
       }
     } else if (cf.phase === 'fight') {
       for (var fi = 0; fi < G.foes.length; fi++) {
@@ -809,9 +852,10 @@ function updateStreet(dt) {
               say('분신술!', 1.6, 'other');
               for (var k = 0; k < 4; k++) {
                 G.foes.push({
-                  x: 1250 + Math.random() * 300, y: GY - 24, vy: 0,
-                  dir: Math.random() < 0.5 ? -1 : 1, speed: 60 + Math.random() * 60,
-                  down: false, isBoss: false, jumpCd: 0.3 + Math.random(), ph: 0
+                  x: 1256 + k * 79 + Math.random() * 18, y: GY - 24,
+                  vy: -150 - Math.random() * 90,
+                  dir: k % 2 ? -1 : 1, speed: 55 + Math.random() * 55,
+                  down: false, isBoss: false, jumpCd: 0.25 + Math.random() * 0.7, ph: 0
                 });
               }
             }
@@ -845,10 +889,11 @@ function updateStreet(dt) {
         });
       }
     }
-    if (G.flags.dirDown && !G.flags.warm && G.foes.length && Math.abs(p.x - G.foes[0].x) < 38) {
-      G.flags.warm = true;
-      say('따뜻하다. 방금 사직서 수리했나봐...', 3.0, 'none');
-    }
+  }
+
+  if (!G.cine && G.flags.dirDown && !G.flags.warm && G.foes.length && Math.abs(p.x - G.foes[0].x) < 38) {
+    G.flags.warm = true;
+    say('따뜻하다. 방금 사직서 수리했나봐...', 3.0, 'none');
   }
 
   /* 5. dog */
@@ -880,9 +925,9 @@ function updateStreet(dt) {
   }
 
   /* 5b. walk into the animal hospital */
-  if (G.flags.dog && !G.flags.dogOut && !G.trans && !G.scene && p.x > 1900) {
+  if (G.flags.dog && !G.flags.dogOut && !G.trans && !G.scene && p.x > 1874) {
     startTransition(function () {
-      G.player.x = 1930;
+      G.player.x = 1892;
       G.player.vx = 0;
       G.scene = { type: 'hospital', t: 0 };
       music('heal');
