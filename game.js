@@ -93,9 +93,9 @@ function sfx(name) {
     case 'heart': tone(880, 0.1, { type: 'triangle', vol: 0.05 }); tone(1320, 0.18, { type: 'triangle', vol: 0.05, when: 0.09 }); break;
     case 'blink': tone(500, 0.5, { type: 'sine', vol: 0.06, slide: 0.4 }); break;
     case 'whistle':
-      tone(392, 0.5, { type: 'sawtooth', vol: 0.05, slide: 1.03 });
-      tone(523, 0.5, { type: 'sawtooth', vol: 0.04, slide: 1.03, when: 0.02 });
-      tone(659, 0.45, { type: 'sawtooth', vol: 0.035, slide: 1.6, when: 0.5 });
+      tone(392, 0.5, { type: 'sawtooth', vol: 0.022, slide: 1.03 });
+      tone(523, 0.5, { type: 'sawtooth', vol: 0.018, slide: 1.03, when: 0.02 });
+      tone(659, 0.45, { type: 'sawtooth', vol: 0.015, slide: 1.6, when: 0.5 });
       break;
     case 'paper': tone(1400, 0.05, { type: 'triangle', vol: 0.03 }); tone(900, 0.07, { type: 'triangle', vol: 0.025, when: 0.05 }); break;
     case 'whoosh': tone(300, 0.22, { type: 'sawtooth', vol: 0.03, slide: 2.2 }); break;
@@ -110,8 +110,8 @@ function music(name) {
   if (songEl) { songEl.pause(); songEl.currentTime = 0; songEl = null; }
   if (SONGS[name]) {
     songEl = new Audio(SONGS[name]);
-    songEl.loop = true;
-    songEl.volume = 0.55;
+    songEl.loop = name !== 'heal';
+    songEl.volume = 0.18;
     songEl.muted = muted;
     var pr = songEl.play();
     if (pr && pr.catch) pr.catch(function () {});
@@ -255,7 +255,11 @@ var G = {
   achDone: {},
   achMsg: { text: '', t: 0 },
   dirX: 1470,
-  bossHits: 0
+  bossHits: 0,
+  foes: [],
+  shots: [],
+  jumpOn: 0,
+  throwPose: 0
 };
 
 var ACH_NAME = {
@@ -263,6 +267,7 @@ var ACH_NAME = {
   skipCat: '[고양이를 무시하다니: 앙꼬에게 츄르를 사주세요!]',
   skipDog: '[다다를 무시하다니: 다다를 주에 3회 이상 산책시키세요!]',
   bromance: '[브로맨스: ....숨은 취향 발견?!]',
+  oldman: '[노인 공격! : 요즘 보기 드믄 젊은이다.]',
   steps: '[슈퍼 길치: 그냥 오른쪽으로만 가....]'
 };
 var ACH_LIST = [
@@ -272,7 +277,8 @@ var ACH_LIST = [
   { id: 'skipCat', name: '고양이를 무시하다니', hint: '앙꼬 지나치기' },
   { id: 'skipDog', name: '다다를 무시하다니', hint: '다다 지나치기' },
   { id: 'bromance', name: '브로맨스', hint: '원장에게 5회 피격' },
-  { id: 'steps', name: '슈퍼 길치', hint: '410걸음' }
+  { id: 'steps', name: '슈퍼 길치', hint: '410걸음' },
+  { id: 'oldman', name: '노인 공격!', hint: '쓰러진 원장 위 점프 5회' }
 ];
 var achSig = '';
 
@@ -396,7 +402,7 @@ function startGame() {
   G.dirX = 1470;
   G.bossHits = 0;
   syncAch();
-  G.flags = { cat: false, woman: false, womanGone: false, letter: false, dirDown: false, dog: false, dogOut: false, ticket: false, meeting: false };
+  G.flags = { cat: false, woman: false, womanGone: false, letter: false, dirDown: false, dog: false, dogOut: false, ticket: false, meeting: false, warm: false };
   G.woman = { x: 900, face: -1, run: false };
   music('street');
   say('길을 걷는다.', 2.0);
@@ -414,7 +420,7 @@ function enterWorld(next) {
     G.toast.t = 0;
     G.chap = { text: 'CH.8 · 부산행', t: 3.4 };
     music('train');
-    say('대전역 · 부산행 무궁화호', 3.0);
+    say('대전역 · 부산행 KTX', 3.0);
   } else if (next === 'busan') {
     G.world = 'busan';
     G.player.x = 200;
@@ -501,12 +507,14 @@ function updatePlayer(dt) {
   var p = G.player;
   var canMove = G.lock <= 0 && !G.trans && !G.card && !G.scene;
   var speed = 100;
+  var inFight = G.cine && G.cine.type === 'throw' && G.cine.phase === 'fight';
+  var wasAir = !p.ground;
 
   if (canMove) {
     var dir = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
     if (dir !== 0) { p.vx = dir * speed; p.face = dir; }
     else p.vx = 0;
-    if (G.world !== 'train' && (jumpEdge || keys.jump) && p.ground) {
+    if (G.world !== 'train' && !inFight && (jumpEdge || keys.jump) && p.ground) {
       p.vy = -400; p.ground = false; sfx('jump');
     }
   } else {
@@ -527,6 +535,16 @@ function updatePlayer(dt) {
   p.vy += 1600 * dt;
   p.y += p.vy * dt;
   if (p.y >= GY - p.h) { p.y = GY - p.h; p.vy = 0; p.ground = true; }
+  if (wasAir && p.ground && G.jumpOn < 5) {
+    for (var fo = 0; fo < G.foes.length; fo++) {
+      if (G.foes[fo].down && Math.abs(p.x - G.foes[fo].x) < 16) {
+        G.jumpOn++;
+        if (G.jumpOn >= 5) achUnlock('oldman');
+        break;
+      }
+    }
+  }
+  if (G.throwPose > 0) G.throwPose -= dt;
 
   if (p.vx !== 0) { p.ph += dt * 9; G.dist += Math.abs(p.vx) * dt; }
   if (G.dist / 9 > 410) achUnlock('steps');
@@ -556,7 +574,6 @@ function doorBlock(dir) {
     G.bossHits++;
     sfx('bump');
     G.player.x = dir < 0 ? 1310 : 1494;
-    G.dirX = dir < 0 ? 1384 : 1420;
     say('못 가!', 1.5, 'other');
   } else {
     say('[열리지 않는다.]', 1.2, 'none');
@@ -618,6 +635,20 @@ function drawObstacles(c) {
 }
 
 function drawHUD() {
+  var jb = typeof document !== 'undefined' && document.getElementById('jump');
+  if (jb) {
+    var lbl = (G.cine && G.cine.type === 'throw' && G.cine.phase === 'fight') ? '던지기' : 'JUMP';
+    if (jb.textContent !== lbl) jb.textContent = lbl;
+  }
+  if (G.cine && G.cine.type === 'throw' && G.cine.phase === 'fight' && G.cine.t < 3.4) {
+    var hw2 = 214, hx2 = (W - hw2) / 2 | 0;
+    rrect(hx2, 28, hw2, 15, 3, 'rgba(12,10,22,.9)', 'rgba(255,214,120,.5)');
+    ctx.textAlign = 'center';
+    ctx.font = '9px Galmuri11, monospace';
+    ctx.fillStyle = 'rgba(255,236,190,.95)';
+    ctx.fillText('던지기(점프키)로 사직서를 날려라!', W / 2, 38);
+    ctx.textAlign = 'left';
+  }
   var steps = Math.floor(G.dist / 9);
   ctx.font = '8px Galmuri11, monospace';
   ctx.textAlign = 'right';
@@ -708,7 +739,7 @@ function updateStreet(dt) {
 
   /* 4. director */
   if (G.zone === 'lab' && G.flags.letter && !G.flags.dirDown && !G.cine && p.x > 1390) {
-    G.cine = { type: 'throw', phase: 'talk', t: 0, msgCd: 0, hitCd: 0, doorCd: 0, tries: 0, triesT: 0, hop: 0, hopV: 0, jumpCd: 0 };
+    G.cine = { type: 'throw', phase: 'talk', t: 0, msgCd: 0, hitCd: 0, doorCd: 0, tries: 0, triesT: 0, shotCd: 0, burst: false };
     G.lock = 60;
     G.dirX = 1470;
     G.bossHits = 0;
@@ -722,77 +753,101 @@ function updateStreet(dt) {
     cf.msgCd = Math.max(0, cf.msgCd - dt);
     cf.hitCd = Math.max(0, cf.hitCd - dt);
     cf.doorCd = Math.max(0, cf.doorCd - dt);
-    cf.jumpCd = Math.max(0, cf.jumpCd - dt);
+    cf.shotCd = Math.max(0, cf.shotCd - dt);
     if (cf.triesT > 0) { cf.triesT -= dt; if (cf.triesT <= 0) cf.tries = 0; }
-    var ddist = Math.abs(p.x - G.dirX);
     if (cf.phase === 'talk') {
-      if (dialogDone()) { cf.phase = 'chase'; cf.runT = 0; cf.tired = 0; cf.jumpCd = 0.6; cf.t = 0; G.lock = 0; sfx('whoosh'); }
-    } else if (cf.phase === 'chase') {
-      if (cf.tired > 0) {
-        cf.tired -= dt;
-        if (cf.tired <= 0) cf.runT = 0;
-      } else {
-        cf.runT = (cf.runT || 0) + dt;
-        if (cf.runT > 2.0) {
-          cf.tired = 2.6; cf.hop = 0; cf.hopV = 0; sfx('tick');
-        } else {
-          var step = (p.x > G.dirX ? 1 : -1) * 96 * dt;
-          if (ddist > 12) G.dirX += step;
-          cf.hopV += 1500 * dt;
-          cf.hop += cf.hopV * dt;
-          if (cf.hop > 0) { cf.hop = 0; cf.hopV = 0; }
-          if (cf.hop === 0 && cf.jumpCd <= 0) { cf.hopV = -280; cf.jumpCd = 0.8 + Math.random() * 0.9; }
-        }
-      }
-      G.dirX = clamp(G.dirX, 1222, 1582);
-      cf.jumpCd -= dt;
-      ddist = Math.abs(p.x - G.dirX);
-      if (ddist < 24 && cf.hitCd <= 0 && G.lock <= 0) {
-        cf.hitCd = 1.1;
-        G.bossHits++;
-        G.lock = 0.42;
-        p.x -= p.face * 18;
-        p.vy = -150; p.ground = false;
-        sfx('bump');
-        for (var b1 = 0; b1 < 7; b1++) {
-          G.parts.push({
-            x: p.x + 6, y: p.y + 8 + Math.random() * 10,
-            vx: (Math.random() - 0.5) * 90, vy: -Math.random() * 70,
-            life: 0.45, max: 0.45, size: 1, col: '#e6e0f0'
-          });
-        }
-        if (G.bossHits >= 5) achUnlock('bromance');
-      }
-      if (keys.jump || jumpEdge) {
-        jumpEdge = false;
-        if (ddist <= 210 && (cf.tired > 0 || ddist >= 40)) {
-          cf.phase = 'aim'; cf.t = 0; cf.px = p.x; G.lock = 2.6;
-          sfx('tick');
-          sayQ([{ t: '[퇴사의 호흡...1형...]', w: 'none' }, { t: '[사직서 날리기!]', w: 'none' }], 1.1);
-        } else if (cf.msgCd <= 0) {
-          cf.msgCd = 1.4;
-          say(ddist > 210 ? '너무 멀다!' : '아직이다! 숨을 고를 때를 노려라!', 1.0, 'none');
-        }
-      }
-    } else if (cf.phase === 'aim') {
       if (dialogDone()) {
-        cf.phase = 'fly'; cf.t = 0; cf.px = p.x; G.lock = 0.8; sfx('paper');
+        cf.phase = 'fight'; cf.t = 0; G.lock = 0; sfx('whoosh');
+        G.foes = [{ x: 1470, y: GY - 24, vy: 0, dir: -1, speed: 70, down: false, isBoss: true, jumpCd: 0.8, ph: 0 }];
       }
-    } else if (cf.phase === 'fly') {
-      if (cf.t > 0.5 && !cf.hit) {
-        cf.hit = true;
-        G.flags.dirDown = true;
-        sfx('boom');
-        say('아무도 날 막지 못하셈~', 2.2, 'other');
+    } else if (cf.phase === 'fight') {
+      for (var fi = 0; fi < G.foes.length; fi++) {
+        var f = G.foes[fi];
+        f.ph += dt * 6;
+        if (f.down) continue;
+        f.jumpCd -= dt;
+        if (f.jumpCd <= 0) { f.vy = -300 - Math.random() * 70; f.jumpCd = 0.8 + Math.random() * 1.3; }
+        f.vy += 1500 * dt;
+        f.y += f.vy * dt;
+        if (f.y >= GY - 24) { f.y = GY - 24; f.vy = 0; }
+        f.x += f.dir * f.speed * dt;
+        if (f.x < 1238) { f.x = 1238; f.dir = 1; }
+        if (f.x > 1566) { f.x = 1566; f.dir = -1; }
+        if (Math.random() < dt * 0.8) f.dir = Math.random() < 0.5 ? -1 : 1;
+        if (Math.random() < dt * 0.6) f.speed = 45 + Math.random() * 75;
+        if (overlap(p, { x: f.x - 7, y: f.y, w: 14, h: 24 }) && cf.hitCd <= 0) {
+          cf.hitCd = 1.0;
+          G.bossHits++;
+          p.x -= p.face * 14;
+          p.vy = -120; p.ground = false;
+          sfx('bump');
+          if (G.bossHits >= 5) achUnlock('bromance');
+        }
       }
-      if (cf.hit && cf.t > 2.8 && !cf.out) {
+      for (var si = G.shots.length - 1; si >= 0; si--) {
+        var sh = G.shots[si];
+        sh.x += sh.vx * dt;
+        if (sh.x < 1220 || sh.x > 1590) { G.shots.splice(si, 1); continue; }
+        for (var gi = 0; gi < G.foes.length; gi++) {
+          var gf = G.foes[gi];
+          if (gf.down) continue;
+          if (overlap({ x: sh.x, y: sh.y, w: 9, h: 7 }, { x: gf.x - 7, y: gf.y + 4, w: 14, h: 20 })) {
+            gf.down = true;
+            G.shots.splice(si, 1);
+            sfx('boom');
+            for (var bp = 0; bp < 8; bp++) {
+              G.parts.push({
+                x: gf.x + 2, y: gf.y + 10 + Math.random() * 8,
+                vx: (Math.random() - 0.5) * 110, vy: -Math.random() * 80,
+                life: 0.5, max: 0.5, size: 1, col: '#f6f1e4'
+              });
+            }
+            if (gf.isBoss && !cf.burst) {
+              cf.burst = true;
+              G.flags.dirDown = true;
+              G.lock = 1.6;
+              say('분신술!', 1.6, 'other');
+              for (var k = 0; k < 4; k++) {
+                G.foes.push({
+                  x: 1250 + Math.random() * 300, y: GY - 24, vy: 0,
+                  dir: Math.random() < 0.5 ? -1 : 1, speed: 60 + Math.random() * 60,
+                  down: false, isBoss: false, jumpCd: 0.3 + Math.random(), ph: 0
+                });
+              }
+            }
+            break;
+          }
+        }
+      }
+      if ((jumpEdge || keys.jump) && cf.shotCd <= 0 && G.lock <= 0) {
+        jumpEdge = false;
+        cf.shotCd = 0.34;
+        G.throwPose = 0.22;
+        sfx('paper');
+        G.shots.push({ x: p.x + p.face * 8, y: p.y + 8, vx: p.face * 300 });
+      }
+      if (cf.burst) {
+        var alive = 0;
+        for (var ai = 0; ai < G.foes.length; ai++) if (!G.foes[ai].down) alive++;
+        if (alive === 0) { cf.phase = 'clear'; cf.t = 0; G.lock = 1.6; sfx('boom'); }
+      }
+    } else if (cf.phase === 'clear') {
+      if (cf.t > 1.8 && !cf.out) {
         cf.out = true;
+        var keep = [];
+        for (var ki = 0; ki < G.foes.length; ki++) if (G.foes[ki].isBoss) keep.push(G.foes[ki]);
+        G.foes = keep;
+        G.shots = [];
         startTransition(function () {
           G.cine = null; G.lock = 1.4; G.sky = 'dusk';
           G.chap = { text: 'CH.4 · 다다', t: 3.2 };
           music('street');
         });
       }
+    }
+    if (G.flags.dirDown && !G.flags.warm && G.foes.length && Math.abs(p.x - G.foes[0].x) < 38) {
+      G.flags.warm = true;
+      say('따뜻하다. 방금 사직서 수리했나봐...', 3.0, 'none');
     }
   }
 
@@ -1470,28 +1525,19 @@ function drawStreetWorld() {
     drawWoman(wm.x - c, GY - 24, wm.face, wm.run ? G.t * 16 : 0);
   }
 
-  if (G.zone === 'lab') {
-    var runB = G.cine && G.cine.type === 'throw' && G.cine.phase === 'chase';
-    var tiredB = runB && G.cine.tired > 0;
-    var bobY = runB ? (tiredB ? Math.sin(G.t * 19) * 1 : Math.sin(G.t * 13) * 1.5) + (G.cine.hop || 0) : 0;
-    drawDirector(G.dirX - c, GY - 24 + bobY, G.flags.dirDown);
-    if (tiredB) {
-      ctx.font = '8px Galmuri11, monospace';
-      ctx.fillStyle = 'rgba(255,236,190,' + (0.75 + 0.25 * Math.sin(G.t * 6)) + ')';
-      ctx.textAlign = 'center';
-      ctx.fillText('헉... 헉...', G.dirX - c + 6, GY - 60);
-      ctx.textAlign = 'left';
+  if (G.zone === 'lab' || G.foes.length) {
+    for (var di = 0; di < G.foes.length; di++) {
+      var df = G.foes[di];
+      var dbob = df.down ? 0 : Math.sin(G.t * 13 + df.x * 0.1) * 1;
+      drawDirector(df.x - c, df.y + dbob, df.down);
+      if (!df.down && G.cine && G.cine.phase === 'talk' && di === 0) drawAlert(df.x - c + 6, df.y - 4);
     }
-    if (G.cine && G.cine.type === 'throw' && (G.cine.phase === 'talk' || (runB && !tiredB))) {
-      drawAlert(G.dirX - c + 6, GY - 28);
-    }
-    if (G.cine && G.cine.type === 'throw' && G.cine.phase === 'fly') {
-      var pr = clamp(G.cine.t / 0.5, 0, 1);
-      var fx = G.cine.px + (G.dirX - G.cine.px) * pr;
-      var fy = GY - 24 - Math.sin(pr * Math.PI) * 16;
-      px(fx - c - 2, fy, 11, 8, '#f6f1e4');
-      px(fx - c - 2, fy + 3, 11, 1, '#c9576a');
-    }
+  }
+  for (var shi = 0; shi < G.shots.length; shi++) {
+    var shp = G.shots[shi];
+    px(shp.x - c, shp.y, 9, 7, '#f6f1e4');
+    px(shp.x - c, shp.y + 3, 9, 1, '#c9576a');
+    px(shp.x - c - 4 * Math.sign(shp.vx), shp.y + 2, 4, 1, 'rgba(255,255,255,.35)');
   }
 
   if (!G.flags.dog && G.player.x > 1640) {
@@ -1529,7 +1575,7 @@ function drawStreetWorld() {
   }
 
   drawTrailPets();
-  var thrust = G.cine && G.cine.type === 'throw' && (G.cine.phase === 'aim' || G.cine.phase === 'fly');
+  var thrust = G.throwPose > 0;
   if (thrust) drawBoyThrow(G.player.x - c, G.player.y, G.player.face);
   else drawBoy(G.player.x - c, G.player.y, G.player.ph, G.player.face);
   if (G.lock > 0 && !G.card && !G.scene && !thrust) drawAlert(G.player.x - c + 6, G.player.y);
@@ -1803,25 +1849,6 @@ function render() {
     drawHUD();
     drawToast();
     drawAch();
-    if (G.cine && G.cine.type === 'throw' && G.cine.phase === 'chase') {
-      var ddn = Math.abs(G.player.x - G.dirX);
-      var okRange = ddn <= 210 && (G.cine.tired > 0 || ddn >= 40);
-      if (G.achMsg.t <= 0) {
-        var bw = 96, bx = (W - bw) / 2 | 0, by = 70;
-        px(bx, by, bw, 3, 'rgba(12,10,22,.7)');
-        px(bx + (40 / 220) * bw, by, ((210 - 40) / 220) * bw, 3, 'rgba(255,214,120,.45)');
-        px(bx + Math.min(bw - 3, (ddn / 220) * bw), by - 1, 3, 5, okRange ? '#8ef0a8' : '#ff9aa2');
-      }
-      if (okRange) {
-        var hw = 150, hx = (W - hw) / 2 | 0, hy = 30;
-        rrect(hx, hy, hw, 16, 3, 'rgba(12,10,22,.92)', 'rgba(142,240,168,.75)');
-        ctx.textAlign = 'center';
-        ctx.font = '9px Galmuri11, monospace';
-        ctx.fillStyle = 'rgba(200,255,214,' + (0.75 + 0.25 * Math.sin(G.t * 8)) + ')';
-        ctx.fillText('지금이다! 점프!', W / 2, hy + 11);
-        ctx.textAlign = 'left';
-      }
-    }
     if (G.scene) drawScene();
     if (G.blink > 0) {
       var bh = (H / 2) * G.blink;
@@ -1858,6 +1885,6 @@ function frame(now) {
 }
 
 /* start */
-G.flags = { cat: false, woman: false, womanGone: false, letter: false, dirDown: false, dog: false, ticket: false, meeting: false };
+G.flags = { cat: false, woman: false, womanGone: false, letter: false, dirDown: false, dog: false, ticket: false, meeting: false, warm: false };
 G.woman = { x: 900, face: -1, run: false };
 requestAnimationFrame(frame);
