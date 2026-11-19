@@ -280,7 +280,7 @@ var ACH_LIST = [
   { id: 'bromance', name: '브로맨스', hint: '원장에게 5회 피격' },
   { id: 'steps', name: '슈퍼 길치', hint: '410걸음' },
   { id: 'oldman', name: '노인 공격!', hint: '쓰러진 원장 위 점프 5회' },
-  { id: 'catbird', name: '고양이 본능 발현', hint: '앙꼬가 새를 잡게 하기' }
+  { id: 'catbird', name: '고양이 본능 발현', hint: '앙꼬가 점프해 새를 잡게 하기' }
 ];
 var achSig = '';
 
@@ -587,7 +587,7 @@ function doorBlock(dir) {
 }
 
 function checkCatBird() {
-  if (!G.flags.cat || G.mode !== 'play' || G.world === 'train') return;
+  if (!G.flags.cat || G.mode !== 'play' || G.world === 'train' || G.player.ground) return;
   var list = OBST[G.world] || [];
   var p = G.player;
   var cat = { x: p.x - 52, y: p.y + 12, w: 10, h: 10 };
@@ -595,7 +595,7 @@ function checkCatBird() {
     var o = list[i];
     if (o.type !== 'bird' || o.gone) continue;
     var cb = obstBox(o);
-    if (Math.abs(cb.x + cb.w / 2 - (cat.x + 5)) < 18) {
+    if (Math.abs(cb.x + cb.w / 2 - (cat.x + 5)) < 18 && Math.abs(cb.y + cb.h / 2 - (cat.y + 5)) < 16) {
       o.gone = true;
       sfx('meow');
       achUnlock('catbird');
@@ -941,7 +941,7 @@ function updateStreet(dt) {
     G.flags.ticket = true;
     G.chap = { text: 'CH.7 · 대전역', t: 3.2 };
     sfx('get');
-    say('대전 – 부산 행 티켓을 받았다.', 2.6);
+    say('대전 – 부산 행 티켓을 얻었다.', 2.6);
   }
 
   /* 7. station */
