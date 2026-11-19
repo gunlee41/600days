@@ -47,18 +47,6 @@ var TRACKS = {
           65, 0, 69, 0, 74, 0, 77, 0, 76, 0, 72, 0, 69, 0, 0, 0],
     bass: [41, 41, 48, 46]
   },
-  battle: {
-    bpm: 172,
-    mel: [69, 0, 72, 0, 76, 0, 72, 0, 74, 0, 77, 0, 81, 0, 77, 0,
-          76, 0, 79, 0, 83, 0, 79, 0, 81, 77, 74, 0, 69, 0, 0, 0],
-    bass: [45, 45, 52, 52, 41, 41, 43, 43]
-  },
-  heal: {
-    bpm: 96,
-    mel: [72, 0, 76, 0, 79, 0, 76, 0, 77, 0, 81, 0, 84, 0, 81, 0,
-          79, 0, 83, 0, 86, 0, 83, 0, 76, 0, 79, 0, 72, 0, 0, 0],
-    bass: [48, 53, 55, 48]
-  },
   ending: {
     bpm: 148,
     mel: [72, 76, 79, 84, 79, 76, 72, 0, 74, 77, 81, 86, 81, 77, 74, 0,
@@ -111,11 +99,25 @@ function sfx(name) {
       break;
     case 'paper': tone(1400, 0.05, { type: 'triangle', vol: 0.03 }); tone(900, 0.07, { type: 'triangle', vol: 0.025, when: 0.05 }); break;
     case 'whoosh': tone(300, 0.22, { type: 'sawtooth', vol: 0.03, slide: 2.2 }); break;
+    case 'beep': tone(880, 0.07, { type: 'square', vol: 0.05 }); tone(660, 0.09, { type: 'square', vol: 0.05, when: 0.09 }); break;
     case 'bump': tone(160, 0.1, { type: 'square', vol: 0.07, slide: 0.6 }); tone(110, 0.14, { type: 'triangle', vol: 0.05, when: 0.05 }); break;
   }
 }
 
+var SONGS = { battle: 'battle.mp3', heal: 'heal.mp3' };
+var songEl = null;
 function music(name) {
+  if (songEl) { songEl.pause(); songEl.currentTime = 0; songEl = null; }
+  if (SONGS[name]) {
+    songEl = new Audio(SONGS[name]);
+    songEl.loop = true;
+    songEl.volume = 0.55;
+    songEl.muted = muted;
+    var pr = songEl.play();
+    if (pr && pr.catch) pr.catch(function () {});
+    track = null;
+    return;
+  }
   if (!TRACKS[name]) return;
   track = TRACKS[name];
   step = 0;
@@ -185,6 +187,7 @@ bindBtn('jump', 'jump');
 function toggleMute() {
   muted = !muted;
   document.getElementById('mute').textContent = muted ? '×' : '♪';
+  if (songEl) songEl.muted = muted;
   if (!muted && ac && ac.state === 'suspended') ac.resume();
 }
 document.getElementById('mute').addEventListener('click', function (e) { e.stopPropagation(); toggleMute(); });
@@ -513,8 +516,13 @@ function updatePlayer(dt) {
 
   p.x += p.vx * dt;
   var loX = 0, hiX = (G.world === 'busan' ? BUSAN_LEN : STREET_LEN) - 20;
-  if (G.cine && G.cine.type === 'throw' && G.cine.phase === 'chase') { loX = 1216; hiX = 1584; }
+  var cfx = G.cine && G.cine.type === 'throw' ? G.cine : null;
+  if (cfx) { loX = 1222; hiX = 1582; }
   p.x = clamp(p.x, loX, hiX);
+  if (cfx && G.lock <= 0 && !G.trans) {
+    if (p.x <= loX + 0.5) doorBlock(-1);
+    else if (p.x >= hiX - 0.5) doorBlock(1);
+  }
 
   p.vy += 1600 * dt;
   p.y += p.vy * dt;
@@ -530,6 +538,29 @@ function updatePlayer(dt) {
   var len = G.world === 'busan' ? BUSAN_LEN : STREET_LEN;
   var target = clamp(p.x - W * 0.38, 0, Math.max(0, len - W));
   G.cam += (target - G.cam) * Math.min(1, dt * 8);
+}
+
+function doorBlock(dir) {
+  var cf = G.cine;
+  if (!cf || cf.doorCd > 0) return;
+  cf.doorCd = 1.1;
+  cf.tries = (cf.tries || 0) + 1;
+  cf.triesT = 7;
+  G.player.x -= dir * 16;
+  G.player.vx = 0;
+  sfx('beep');
+  if (cf.tries >= 4) {
+    cf.tries = 0;
+    G.lock = 0.6;
+    cf.doorCd = 2.4;
+    G.bossHits++;
+    sfx('bump');
+    G.player.x = dir < 0 ? 1310 : 1494;
+    G.dirX = dir < 0 ? 1384 : 1420;
+    say('못 가!', 1.5, 'other');
+  } else {
+    say('[열리지 않는다.]', 1.2, 'none');
+  }
 }
 
 function updateObstacles(dt) {
@@ -677,7 +708,7 @@ function updateStreet(dt) {
 
   /* 4. director */
   if (G.zone === 'lab' && G.flags.letter && !G.flags.dirDown && !G.cine && p.x > 1390) {
-    G.cine = { type: 'throw', phase: 'talk', t: 0, msgCd: 0, hitCd: 0 };
+    G.cine = { type: 'throw', phase: 'talk', t: 0, msgCd: 0, hitCd: 0, doorCd: 0, tries: 0, triesT: 0, hop: 0, hopV: 0, jumpCd: 0 };
     G.lock = 60;
     G.dirX = 1470;
     G.bossHits = 0;
@@ -690,15 +721,22 @@ function updateStreet(dt) {
     cf.t += dt;
     cf.msgCd = Math.max(0, cf.msgCd - dt);
     cf.hitCd = Math.max(0, cf.hitCd - dt);
+    cf.doorCd = Math.max(0, cf.doorCd - dt);
+    cf.jumpCd = Math.max(0, cf.jumpCd - dt);
+    if (cf.triesT > 0) { cf.triesT -= dt; if (cf.triesT <= 0) cf.tries = 0; }
     var ddist = Math.abs(p.x - G.dirX);
     if (cf.phase === 'talk') {
       if (dialogDone()) { cf.phase = 'chase'; cf.t = 0; G.lock = 0; sfx('whoosh'); }
     } else if (cf.phase === 'chase') {
-      var step = (p.x > G.dirX ? 1 : -1) * 78 * dt;
-      if (ddist > 34) G.dirX += step;
-      G.dirX = clamp(G.dirX, 1216, 1584);
+      var step = (p.x > G.dirX ? 1 : -1) * 112 * dt;
+      if (ddist > 12) G.dirX += step;
+      G.dirX = clamp(G.dirX, 1222, 1582);
+      cf.hopV += 1500 * dt;
+      cf.hop += cf.hopV * dt;
+      if (cf.hop > 0) { cf.hop = 0; cf.hopV = 0; }
+      if (cf.hop === 0 && cf.jumpCd <= 0) { cf.hopV = -280; cf.jumpCd = 0.8 + Math.random() * 0.9; }
       ddist = Math.abs(p.x - G.dirX);
-      if (ddist < 26 && cf.hitCd <= 0 && G.lock <= 0) {
+      if (ddist < 24 && cf.hitCd <= 0 && G.lock <= 0) {
         cf.hitCd = 1.1;
         G.bossHits++;
         G.lock = 0.42;
@@ -717,11 +755,17 @@ function updateStreet(dt) {
       if (keys.jump || jumpEdge) {
         jumpEdge = false;
         if (ddist >= 70 && ddist <= 170) {
-          cf.phase = 'fly'; cf.t = 0; cf.px = p.x; sfx('paper');
+          cf.phase = 'aim'; cf.t = 0; cf.px = p.x; G.lock = 2.6;
+          sfx('tick');
+          sayQ([{ t: '[퇴사의 호흡...1형...]', w: 'none' }, { t: '[사직서 날리기!]', w: 'none' }], 1.1);
         } else if (cf.msgCd <= 0) {
           cf.msgCd = 1.4;
           say(ddist < 70 ? '너무 가깝다!' : '너무 멀다!', 1.0, 'none');
         }
+      }
+    } else if (cf.phase === 'aim') {
+      if (dialogDone()) {
+        cf.phase = 'fly'; cf.t = 0; cf.px = p.x; G.lock = 0.8; sfx('paper');
       }
     } else if (cf.phase === 'fly') {
       if (cf.t > 0.5 && !cf.hit) {
@@ -908,6 +952,29 @@ function drawBoy(x, y, ph, face) {
   px(7 + Math.max(0, -sw), 17, 2, 5 - Math.abs(sw), pants);
   px(3 + Math.max(0, sw), 22, 2, 2, shoe);
   px(7 + Math.max(0, -sw), 22, 2, 2, shoe);
+  ctx.restore();
+}
+
+function drawBoyThrow(x, y, face) {
+  ctx.save();
+  ctx.translate(x | 0, y | 0);
+  if (face < 0) { ctx.translate(12, 0); ctx.scale(-1, 1); }
+  var skin = '#f7cfa8', hair = '#2a2333', shirt = '#eef3ff', shirtD = '#c3cfe8',
+    pants = '#3b4670', shoe = '#1e1d26';
+  px(2, 0, 8, 3, hair);
+  px(1, 2, 10, 2, hair);
+  px(2, 4, 8, 4, skin);
+  px(3, 5, 1, 2, hair); px(8, 5, 1, 2, hair);
+  px(5, 7, 2, 1, '#dfa87e');
+  px(3, 8, 6, 7, shirt);
+  px(2, 9, 1, 5, shirtD);
+  px(3, 15, 6, 2, pants);
+  px(2, 17, 2, 5, pants); px(8, 17, 2, 5, pants);
+  px(2, 22, 3, 2, shoe); px(7, 22, 3, 2, shoe);
+  px(8, 8, 3, 4, skin);
+  px(8, 0, 9, 10, '#2b2740');
+  px(9, 1, 7, 8, '#f6f1e4');
+  px(9, 4, 7, 1, '#c9576a');
   ctx.restore();
 }
 
@@ -1394,7 +1461,7 @@ function drawStreetWorld() {
 
   if (G.zone === 'lab') {
     var runB = G.cine && G.cine.type === 'throw' && G.cine.phase === 'chase';
-    var bobY = runB ? Math.sin(G.t * 13) * 1.5 : 0;
+    var bobY = runB ? Math.sin(G.t * 13) * 1.5 + (G.cine.hop || 0) : 0;
     drawDirector(G.dirX - c, GY - 24 + bobY, G.flags.dirDown);
     if (G.cine && G.cine.type === 'throw' && (G.cine.phase === 'talk' || runB)) {
       drawAlert(G.dirX - c + 6, GY - 28);
@@ -1443,8 +1510,10 @@ function drawStreetWorld() {
   }
 
   drawTrailPets();
-  drawBoy(G.player.x - c, G.player.y, G.player.ph, G.player.face);
-  if (G.lock > 0 && !G.card && !G.scene) drawAlert(G.player.x - c + 6, G.player.y);
+  var thrust = G.cine && G.cine.type === 'throw' && (G.cine.phase === 'aim' || G.cine.phase === 'fly');
+  if (thrust) drawBoyThrow(G.player.x - c, G.player.y, G.player.face);
+  else drawBoy(G.player.x - c, G.player.y, G.player.ph, G.player.face);
+  if (G.lock > 0 && !G.card && !G.scene && !thrust) drawAlert(G.player.x - c + 6, G.player.y);
 
   if (G.player.x > 2240) {
     var ax = 2400 - c;
