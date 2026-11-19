@@ -587,15 +587,18 @@ function doorBlock(dir) {
 }
 
 function checkCatBird() {
-  if (!G.flags.cat || G.mode !== 'play' || G.world === 'train' || G.player.ground) return;
+  if (!G.flags.cat || G.mode !== 'play' || G.world === 'train') return;
+  var ti = G.trail.length - 34;
+  if (ti < 0) return;
+  var t1 = G.trail[ti];
+  if (t1.y >= GY - 30) return;
+  var cx = t1.x + 6, cy = t1.y + 18;
   var list = OBST[G.world] || [];
-  var p = G.player;
-  var cat = { x: p.x - 52, y: p.y + 12, w: 10, h: 10 };
   for (var i = 0; i < list.length; i++) {
     var o = list[i];
     if (o.type !== 'bird' || o.gone) continue;
     var cb = obstBox(o);
-    if (Math.abs(cb.x + cb.w / 2 - (cat.x + 5)) < 18 && Math.abs(cb.y + cb.h / 2 - (cat.y + 5)) < 16) {
+    if (Math.abs(cb.x + cb.w / 2 - cx) < 17 && Math.abs(cb.y + cb.h / 2 - cy) < 20) {
       o.gone = true;
       sfx('meow');
       achUnlock('catbird');
