@@ -726,15 +726,26 @@ function updateStreet(dt) {
     if (cf.triesT > 0) { cf.triesT -= dt; if (cf.triesT <= 0) cf.tries = 0; }
     var ddist = Math.abs(p.x - G.dirX);
     if (cf.phase === 'talk') {
-      if (dialogDone()) { cf.phase = 'chase'; cf.t = 0; G.lock = 0; sfx('whoosh'); }
+      if (dialogDone()) { cf.phase = 'chase'; cf.runT = 0; cf.tired = 0; cf.jumpCd = 0.6; cf.t = 0; G.lock = 0; sfx('whoosh'); }
     } else if (cf.phase === 'chase') {
-      var step = (p.x > G.dirX ? 1 : -1) * 112 * dt;
-      if (ddist > 12) G.dirX += step;
+      if (cf.tired > 0) {
+        cf.tired -= dt;
+        if (cf.tired <= 0) cf.runT = 0;
+      } else {
+        cf.runT = (cf.runT || 0) + dt;
+        if (cf.runT > 2.0) {
+          cf.tired = 2.6; cf.hop = 0; cf.hopV = 0; sfx('tick');
+        } else {
+          var step = (p.x > G.dirX ? 1 : -1) * 96 * dt;
+          if (ddist > 12) G.dirX += step;
+          cf.hopV += 1500 * dt;
+          cf.hop += cf.hopV * dt;
+          if (cf.hop > 0) { cf.hop = 0; cf.hopV = 0; }
+          if (cf.hop === 0 && cf.jumpCd <= 0) { cf.hopV = -280; cf.jumpCd = 0.8 + Math.random() * 0.9; }
+        }
+      }
       G.dirX = clamp(G.dirX, 1222, 1582);
-      cf.hopV += 1500 * dt;
-      cf.hop += cf.hopV * dt;
-      if (cf.hop > 0) { cf.hop = 0; cf.hopV = 0; }
-      if (cf.hop === 0 && cf.jumpCd <= 0) { cf.hopV = -280; cf.jumpCd = 0.8 + Math.random() * 0.9; }
+      cf.jumpCd -= dt;
       ddist = Math.abs(p.x - G.dirX);
       if (ddist < 24 && cf.hitCd <= 0 && G.lock <= 0) {
         cf.hitCd = 1.1;
@@ -754,13 +765,13 @@ function updateStreet(dt) {
       }
       if (keys.jump || jumpEdge) {
         jumpEdge = false;
-        if (ddist >= 70 && ddist <= 170) {
+        if (ddist >= 55 && ddist <= 210) {
           cf.phase = 'aim'; cf.t = 0; cf.px = p.x; G.lock = 2.6;
           sfx('tick');
           sayQ([{ t: '[퇴사의 호흡...1형...]', w: 'none' }, { t: '[사직서 날리기!]', w: 'none' }], 1.1);
         } else if (cf.msgCd <= 0) {
           cf.msgCd = 1.4;
-          say(ddist < 70 ? '너무 가깝다!' : '너무 멀다!', 1.0, 'none');
+          say(ddist < 55 ? '너무 가깝다!' : '너무 멀다!', 1.0, 'none');
         }
       }
     } else if (cf.phase === 'aim') {
@@ -1461,9 +1472,17 @@ function drawStreetWorld() {
 
   if (G.zone === 'lab') {
     var runB = G.cine && G.cine.type === 'throw' && G.cine.phase === 'chase';
-    var bobY = runB ? Math.sin(G.t * 13) * 1.5 + (G.cine.hop || 0) : 0;
+    var tiredB = runB && G.cine.tired > 0;
+    var bobY = runB ? (tiredB ? Math.sin(G.t * 19) * 1 : Math.sin(G.t * 13) * 1.5) + (G.cine.hop || 0) : 0;
     drawDirector(G.dirX - c, GY - 24 + bobY, G.flags.dirDown);
-    if (G.cine && G.cine.type === 'throw' && (G.cine.phase === 'talk' || runB)) {
+    if (tiredB) {
+      ctx.font = '8px Galmuri11, monospace';
+      ctx.fillStyle = 'rgba(255,220,160,' + (0.55 + 0.45 * Math.sin(G.t * 6)) + ')';
+      ctx.textAlign = 'center';
+      ctx.fillText('헉... 헉...', G.dirX - c + 6, GY - 60);
+      ctx.textAlign = 'left';
+    }
+    if (G.cine && G.cine.type === 'throw' && (G.cine.phase === 'talk' || (runB && !tiredB))) {
       drawAlert(G.dirX - c + 6, GY - 28);
     }
     if (G.cine && G.cine.type === 'throw' && G.cine.phase === 'fly') {
@@ -1786,11 +1805,11 @@ function render() {
     drawAch();
     if (G.cine && G.cine.type === 'throw' && G.cine.phase === 'chase') {
       var ddn = Math.abs(G.player.x - G.dirX);
-      var okRange = ddn >= 70 && ddn <= 170;
+      var okRange = ddn >= 55 && ddn <= 210;
       if (G.achMsg.t <= 0) {
         var bw = 96, bx = (W - bw) / 2 | 0, by = 70;
         px(bx, by, bw, 3, 'rgba(12,10,22,.7)');
-        px(bx + (70 / 220) * bw, by, ((170 - 70) / 220) * bw, 3, 'rgba(255,214,120,.45)');
+        px(bx + (55 / 220) * bw, by, ((210 - 55) / 220) * bw, 3, 'rgba(255,214,120,.45)');
         px(bx + Math.min(bw - 3, (ddn / 220) * bw), by - 1, 3, 5, okRange ? '#8ef0a8' : '#ff9aa2');
       }
       if (okRange) {
